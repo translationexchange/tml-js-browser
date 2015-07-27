@@ -1,0 +1,109 @@
+{
+    "keyword": "genders",
+    "description": null,
+    "keys": [
+        "male",
+        "female",
+        "unknown",
+        "other"
+    ],
+    "token_expression": "/.*(users|profiles|actors|targets)(\\d)*$/",
+    "variables": [
+        "@genders"
+    ],
+    "token_mapping": [
+        "unsupported",
+        "unsupported",
+        "unsupported",
+        {
+            "male": "{$0}",
+            "female": "{$1}",
+            "unknown": "{$2}",
+            "other": "{$3}"
+        }
+    ],
+    "default_rule": "other",
+    "rules": {
+        "female": {
+            "keyword": "female",
+            "definition": {
+                "conditions": "(&& (= 1 (count @genders)) (all @genders 'female'))",
+                "conditions_expression": [
+                    "&&",
+                    [
+                        "=",
+                        1,
+                        [
+                            "count",
+                            "@genders"
+                        ]
+                    ],
+                    [
+                        "all",
+                        "@genders",
+                        "female"
+                    ]
+                ]
+            },
+            "description": "{token} contains 1 female",
+            "examples": null
+        },
+        "male": {
+            "keyword": "male",
+            "definition": {
+                "conditions": "(&& (= 1 (count @genders)) (all @genders 'male'))",
+                "conditions_expression": [
+                    "&&",
+                    [
+                        "=",
+                        1,
+                        [
+                            "count",
+                            "@genders"
+                        ]
+                    ],
+                    [
+                        "all",
+                        "@genders",
+                        "male"
+                    ]
+                ]
+            },
+            "description": "{token} contains 1 male",
+            "examples": null
+        },
+        "other": {
+            "keyword": "other",
+            "definition": {
+                "conditions": null,
+                "conditions_expression": null
+            },
+            "description": "{token} contains at least 2 people",
+            "examples": null
+        },
+        "unknown": {
+            "keyword": "unknown",
+            "definition": {
+                "conditions": "(&& (= 1 (count @genders)) (all @genders 'unknown'))",
+                "conditions_expression": [
+                    "&&",
+                    [
+                        "=",
+                        1,
+                        [
+                            "count",
+                            "@genders"
+                        ]
+                    ],
+                    [
+                        "all",
+                        "@genders",
+                        "unknown"
+                    ]
+                ]
+            },
+            "description": "{token} contains 1 person with unknown gender",
+            "examples": null
+        }
+    }
+}

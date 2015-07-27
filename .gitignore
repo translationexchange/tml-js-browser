@@ -1,0 +1,10 @@
+.idea
+node_modules
+tmp
+coverage
+doc
+coverage.html
+dist
+srv/node_modules
+reports
+projectFilesBackup

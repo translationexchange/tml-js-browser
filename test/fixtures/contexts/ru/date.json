@@ -1,0 +1,72 @@
+{
+    "keyword": "date",
+    "description": null,
+    "definition": {
+        "keys": [
+            "past",
+            "present",
+            "future"
+        ],
+        "token_expression": "/.*(date|time)(\\d)*$/",
+        "variables": [
+            "@date"
+        ],
+        "token_mapping": [
+            "unsupported",
+            "unsupported",
+            {
+                "past": "{$0}",
+                "present": "{$1}",
+                "future": "{$2}"
+            }
+        ],
+        "default_rule": "present"
+    },
+    "rules": {
+        "future": {
+            "keyword": "future",
+            "definition": {
+                "conditions": "(< @date (today))",
+                "conditions_expression": [
+                    "<",
+                    "@date",
+                    [
+                        "today"
+                    ]
+                ]
+            },
+            "description": "{token} is in the past",
+            "examples": null
+        },
+        "past": {
+            "keyword": "past",
+            "definition": {
+                "conditions": "(> @date (today))",
+                "conditions_expression": [
+                    ">",
+                    "@date",
+                    [
+                        "today"
+                    ]
+                ]
+            },
+            "description": "{token} is in the future",
+            "examples": null
+        },
+        "present": {
+            "keyword": "present",
+            "definition": {
+                "conditions": "(= @date (today))",
+                "conditions_expression": [
+                    "=",
+                    "@date",
+                    [
+                        "today"
+                    ]
+                ]
+            },
+            "description": "{token} is in the present",
+            "examples": null
+        }
+    }
+}

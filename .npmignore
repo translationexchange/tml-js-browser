@@ -1,0 +1,13 @@
+node_modules
+test/
+.travis.yml
+.gitignore
+.jshintrc
+Gruntfile.js
+Jakefile.js
+coverage/
+samples/
+tmp/
+doc/
+reports/
+.idea

@@ -1,0 +1,46 @@
+{
+    "keyword": "list",
+    "description": null,
+    "definition": {
+        "keys": [
+            "one",
+            "other"
+        ],
+        "token_expression": "/.*(items|list)(\\d)*$/",
+        "variables": [
+            "@count"
+        ],
+        "token_mapping": [
+            "unsupported",
+            {
+                "one": "{$0}",
+                "other": "{$1}"
+            }
+        ],
+        "default_rule": "other"
+    },
+    "rules": {
+        "one": {
+            "keyword": "one",
+            "definition": {
+                "conditions": "(= 1 @count)",
+                "conditions_expression": [
+                    "=",
+                    1,
+                    "@count"
+                ]
+            },
+            "description": "{token} contains 1 element",
+            "examples": null
+        },
+        "other": {
+            "keyword": "other",
+            "definition": {
+                "conditions": null,
+                "conditions_expression": null
+            },
+            "description": "{token} contains at least 2 elements",
+            "examples": null
+        }
+    }
+}

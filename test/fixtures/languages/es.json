@@ -1,0 +1,359 @@
+{
+    "locale": "es",
+    "name": "Spanish - Español",
+    "english_name": "Spanish",
+    "native_name": "Español",
+    "right_to_left": null,
+    "enabled": true,
+    "google_key": "es",
+    "facebook_key": null,
+    "myheritage_key": "ES",
+    "curse_words": "ddd",
+    "contexts": {
+        "date": {
+            "keyword": "date",
+            "description": null,
+            "definition": {
+                "keys": [
+                    "past",
+                    "present",
+                    "future"
+                ],
+                "token_expression": "/.*(date|time)(\\d)*$/",
+                "variables": [
+                    "@date"
+                ],
+                "token_mapping": [
+                    "unsupported",
+                    "unsupported",
+                    {
+                        "past": "{$0}",
+                        "present": "{$1}",
+                        "future": "{$2}"
+                    }
+                ],
+                "default_rule": "present"
+            },
+            "rules": {
+                "future": {
+                    "keyword": "future",
+                    "definition": {
+                        "conditions": "(< @date (today))",
+                        "conditions_expression": [
+                            "<",
+                            "@date",
+                            [
+                                "today"
+                            ]
+                        ]
+                    },
+                    "description": "{token} is in the past",
+                    "examples": null
+                },
+                "past": {
+                    "keyword": "past",
+                    "definition": {
+                        "conditions": "(> @date (today))",
+                        "conditions_expression": [
+                            ">",
+                            "@date",
+                            [
+                                "today"
+                            ]
+                        ]
+                    },
+                    "description": "{token} is in the future",
+                    "examples": null
+                },
+                "present": {
+                    "keyword": "present",
+                    "definition": {
+                        "conditions": "(= @date (today))",
+                        "conditions_expression": [
+                            "=",
+                            "@date",
+                            [
+                                "today"
+                            ]
+                        ]
+                    },
+                    "description": "{token} is in the present",
+                    "examples": null
+                }
+            }
+        },
+        "gender": {
+            "keyword": "gender",
+            "description": null,
+            "definition": {
+                "keys": [
+                    "male",
+                    "female",
+                    "unknown"
+                ],
+                "token_expression": "/.*(user|translator|profile|actor|target)(\\d)*$/",
+                "variables": [
+                    "@gender"
+                ],
+                "token_mapping": [
+                    {
+                        "other": "{$0}"
+                    },
+                    {
+                        "male": "{$0}",
+                        "female": "{$1}",
+                        "other": "{$0}/{$1}"
+                    },
+                    {
+                        "male": "{$0}",
+                        "female": "{$1}",
+                        "other": "{$2}"
+                    }
+                ],
+                "default_rule": "other"
+            },
+            "rules": {
+                "female": {
+                    "keyword": "female",
+                    "definition": {
+                        "conditions": "(= 'female' @gender)",
+                        "conditions_expression": [
+                            "=",
+                            "female",
+                            "@gender"
+                        ]
+                    },
+                    "description": "{token} is a female",
+                    "examples": null
+                },
+                "male": {
+                    "keyword": "male",
+                    "definition": {
+                        "conditions": "(= 'male' @gender)",
+                        "conditions_expression": [
+                            "=",
+                            "male",
+                            "@gender"
+                        ]
+                    },
+                    "description": "{token} is a male",
+                    "examples": null
+                },
+                "other": {
+                    "keyword": "other",
+                    "definition": {
+                        "conditions": null,
+                        "conditions_expression": null
+                    },
+                    "description": "{token}'s gender is unknown",
+                    "examples": null
+                }
+            }
+        },
+        "genders": {
+            "keyword": "genders",
+            "description": null,
+            "definition": {
+                "keys": [
+                    "male",
+                    "female",
+                    "unknown",
+                    "other"
+                ],
+                "token_expression": "/.*(users|profiles|actors|targets)(\\d)*$/",
+                "variables": [
+                    "@genders"
+                ],
+                "token_mapping": [
+                    "unsupported",
+                    "unsupported",
+                    "unsupported",
+                    {
+                        "male": "{$0}",
+                        "female": "{$1}",
+                        "unknown": "{$2}",
+                        "other": "{$3}"
+                    }
+                ],
+                "default_rule": "other"
+            },
+            "rules": {
+                "female": {
+                    "keyword": "female",
+                    "definition": {
+                        "conditions": "(&& (= 1 (count @genders)) (all @genders 'female'))",
+                        "conditions_expression": [
+                            "&&",
+                            [
+                                "=",
+                                1,
+                                [
+                                    "count",
+                                    "@genders"
+                                ]
+                            ],
+                            [
+                                "all",
+                                "@genders",
+                                "female"
+                            ]
+                        ]
+                    },
+                    "description": "{token} contains 1 female",
+                    "examples": null
+                },
+                "male": {
+                    "keyword": "male",
+                    "definition": {
+                        "conditions": "(&& (= 1 (count @genders)) (all @genders 'male'))",
+                        "conditions_expression": [
+                            "&&",
+                            [
+                                "=",
+                                1,
+                                [
+                                    "count",
+                                    "@genders"
+                                ]
+                            ],
+                            [
+                                "all",
+                                "@genders",
+                                "male"
+                            ]
+                        ]
+                    },
+                    "description": "{token} contains 1 male",
+                    "examples": null
+                },
+                "other": {
+                    "keyword": "other",
+                    "definition": {
+                        "conditions": null,
+                        "conditions_expression": null
+                    },
+                    "description": "{token} contains at least 2 people",
+                    "examples": null
+                },
+                "unknown": {
+                    "keyword": "unknown",
+                    "definition": {
+                        "conditions": "(&& (= 1 (count @genders)) (all @genders 'unknown'))",
+                        "conditions_expression": [
+                            "&&",
+                            [
+                                "=",
+                                1,
+                                [
+                                    "count",
+                                    "@genders"
+                                ]
+                            ],
+                            [
+                                "all",
+                                "@genders",
+                                "unknown"
+                            ]
+                        ]
+                    },
+                    "description": "{token} contains 1 person with unknown gender",
+                    "examples": null
+                }
+            }
+        },
+        "list": {
+            "keyword": "list",
+            "description": null,
+            "definition": {
+                "keys": [
+                    "one",
+                    "other"
+                ],
+                "token_expression": "/.*(items|list)(\\d)*$/",
+                "variables": [
+                    "@count"
+                ],
+                "token_mapping": [
+                    "unsupported",
+                    {
+                        "one": "{$0}",
+                        "other": "{$1}"
+                    }
+                ],
+                "default_rule": "other"
+            },
+            "rules": {
+                "one": {
+                    "keyword": "one",
+                    "definition": {
+                        "conditions": "(= 1 @count)",
+                        "conditions_expression": [
+                            "=",
+                            1,
+                            "@count"
+                        ]
+                    },
+                    "description": "{token} contains 1 element",
+                    "examples": null
+                },
+                "other": {
+                    "keyword": "other",
+                    "definition": {
+                        "conditions": null,
+                        "conditions_expression": null
+                    },
+                    "description": "{token} contains at least 2 elements",
+                    "examples": null
+                }
+            }
+        },
+        "number": {
+            "keyword": "number",
+            "description": null,
+            "definition": {
+                "keys": [
+                    "one",
+                    "other"
+                ],
+                "token_expression": "/.*(count|num|minutes|seconds|hours|sum|total)(\\d)*$/",
+                "variables": [
+                    "@n"
+                ],
+                "token_mapping": [
+                    "unsupported",
+                    {
+                        "one": "{$0}",
+                        "other": "{$1}"
+                    }
+                ],
+                "default_rule": "other"
+            },
+            "rules": {
+                "one": {
+                    "keyword": "one",
+                    "definition": {
+                        "conditions": "(= @n 1)",
+                        "conditions_expression": [
+                            "=",
+                            "@n",
+                            1
+                        ]
+                    },
+                    "description": "{n} is 1",
+                    "examples": "1"
+                },
+                "other": {
+                    "keyword": "other",
+                    "definition": {
+                        "conditions": null,
+                        "conditions_expression": null
+                    },
+                    "description": null,
+                    "examples": "0, 2-999; 1.2, 2.07..."
+                }
+            }
+        }
+    },
+    "cases": {
+    }
+}

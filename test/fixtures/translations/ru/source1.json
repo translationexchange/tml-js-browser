@@ -1,0 +1,250 @@
+{
+  "results":{
+    "b329f56db19684d04e032864c225c574":{
+      "original":{
+        "label":"This application demonstrates Tml's capabilities. Use the menu on the left to choose a sample.",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Это приложение демонстрирует Tml по возможности. Используйте меню слева, чтобы выбрать образец."
+        }
+      ]
+    },
+    "c30b1e017c6ccaa90986f7bd1eb35e97":{
+      "original":{
+        "label":"Welcome to Tml Demo",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Добро пожаловать на демо Tml"
+        }
+      ]
+    },
+    "3f66760cc0c6667083be7e415d7abfd6":{
+      "original":{
+        "label":"Language Tools",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Языковые Инструменты"
+        }
+      ]
+    },
+    "93aaaa0733fc8a1394838a80a8aad14f":{
+      "original":{
+        "label":"Loading Languages...",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Загрузка Языков..."
+        }
+      ]
+    },
+    "75deeb553d36b9564104171e52ed85b4":{
+      "original":{
+        "label":"In-App Translations",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Переводы в App"
+        }
+      ]
+    },
+    "77b1a0ce6cfd1e7010ee2597623050b6":{
+      "original":{
+        "label":"Languages updated"
+      },
+      "translations":[
+        {
+          "label":"Языки обновляются"
+        }
+      ]
+    },
+    "39ee4c74c95ed74d6f33d10c94d8b550":{
+      "original":{
+        "label":"Static Form",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Статические Формы"
+        }
+      ]
+    },
+    "2764c0be70cf0ab5ce0b0162158d2d58":{
+      "original":{
+        "label":"User Interface",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Интерфейс Пользователя"
+        }
+      ]
+    },
+    "9f9e3851e89d74b800fb8e3dda62e33c":{
+      "original":{
+        "label":"Static Table",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Статические Таблицы"
+        }
+      ]
+    },
+    "ce499764f4b8db830b971a7bb7b786c5":{
+      "original":{
+        "label":"Switching language..."
+      },
+      "translations":[
+        {
+          "label":"Переключение языка ..."
+        }
+      ]
+    },
+    "dc1cabac43bc149001e11f001a392707":{
+      "original":{
+        "label":"Language changed"
+      },
+      "translations":[
+        {
+          "label":"Язык изменен"
+        }
+      ]
+    },
+    "eb6f30bc4de415131fce5d46369758d7":{
+      "original":{
+        "label":"Decoration Tokens Demo",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Демо Декорационных Маркеров"
+        }
+      ]
+    },
+    "b1a66da9b719d1d0eb99e17f49183c57":{
+      "original":{
+        "label":"Main Menu",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Главное Меню"
+        }
+      ]
+    },
+    "70b495ef332474b0dbd7f8732c8024b9":{
+      "original":{
+        "label":"Data Tokens Demo",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Демо Дата Маркеров"
+        }
+      ]
+    },
+    "414703d172e5a5149ceeeff245c92b7f":{
+      "original":{
+        "label":"Combined Tokens Demo",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Демо Комбинированных Маркеров"
+        }
+      ]
+    },
+    "03dffccebbb136fbe54abf05b99215a2":{
+      "original":{
+        "label":"Select Language",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"Выбор языка"
+        }
+      ]
+    },
+    "c1c603f2ec04f888319b686ac56525f2":{
+      "original":{
+        "label":"TML Interactive Console",
+        "locale":"en-US"
+      },
+      "translations":[
+        {
+          "label":"TML Интерактивный Консол"
+        }
+      ]
+    },
+    "36f8a6a2b755ad210ed9a8f65a81f976":{
+      "original":{
+        "label":"Translator Tools"
+      },
+      "translations":[
+        {
+          "label":"Инструменты Переводчика"
+        }
+      ]
+    },
+    "3f81f1642f96ea13426ab853ab856ed6":{
+      "original":{
+        "label":"Welcome"
+      },
+      "translations":[
+        {
+          "label":"Добро пожаловать!"
+        }
+      ]
+    },
+    "f6f6ae7cfba58481ad1b338006d98f55":{
+      "original":{
+        "label":"Translate"
+      },
+      "translations":[
+        {
+          "label":"Перевести"
+        }
+      ]
+    },
+    "402fef2f0199d87051c487d0b4b2501e":{
+      "original":{
+        "label":"Change Language"
+      },
+      "translations":[
+        {
+          "label":"Изменить Язык"
+        }
+      ]
+    },
+    "bbadf8323575eec66b860b6ff6cdfc80":{
+      "original":{
+        "label":"Cancel"
+      },
+      "translations":[
+        {
+          "label":"Отменить"
+        }
+      ]
+    }
+  },
+  "sources": [],
+  "pagination": {
+    "total_count":22,
+    "current_page":1,
+    "total_pages":1,
+    "per_page":50,
+    "links":{
+      "first":"",
+      "self":"",
+      "last":""
+    }
+  }
+}

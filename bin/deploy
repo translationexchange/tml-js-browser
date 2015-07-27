@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+grunt build
+aws s3 cp dist/tml-0.2.17.min.js s3://trex-snapshots/tml.js
+bin/invalidate tml.js

@@ -1,0 +1,50 @@
+{
+    "keyword": "value",
+    "description": null,
+    "definition": {
+        "keys": [
+            "vowel",
+            "other"
+        ],
+        "token_expression": "/.*$/",
+        "variables": [
+            "@value"
+        ],
+        "token_mapping": [
+            "unsupported",
+            {
+                "vowel": "{$0}",
+                "con": "{$1}"
+            }
+        ],
+        "default_rule": "vowel"
+    },
+    "rules": {
+        "other": {
+            "keyword": "other",
+            "definition": {
+                "conditions": null,
+                "conditions_expression": null
+            },
+            "description": "{token} starts with a consonant",
+            "examples": "б, в, г, д, к..."
+        },
+        "vowel": {
+            "keyword": "vowel",
+            "definition": {
+                "conditions": [
+                    "match",
+                    "/^[аиоуыэАИОУЭ]/",
+                    "@value"
+                ],
+                "conditions_expression": [
+                    "match",
+                    "/^[аиоуыэАИОУЭ]/",
+                    "@value"
+                ]
+            },
+            "description": "{token} starts with a vowel",
+            "examples": "а, и, о, у, ы, э"
+        }
+    }
+}
