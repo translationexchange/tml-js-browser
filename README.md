@@ -10,8 +10,6 @@ Tml for JavaScript
 [![Dependency status](https://david-dm.org/translationexchange/tml-js/status.png)](https://david-dm.org/translationexchange/tml-js#info=dependencies&view=table) 
 [![Dev Dependency Status](https://david-dm.org/translationexchange/tml-js/dev-status.png)](https://david-dm.org/translationexchange/tml-js#info=devDependencies&view=table)
 
-[![NPM](https://nodei.co/npm/tml-js.png?downloads=true)](https://nodei.co/npm/tml-js) 
-
 This library provides the core JavaScript classes for the Translation Markup Language.
 
 
