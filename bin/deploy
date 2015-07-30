@@ -1,5 +1,48 @@
-#!/usr/bin/env bash
+#!/usr/bin/env ruby
 
-grunt build
-aws s3 cp dist/tml-0.2.17.min.js s3://trex-snapshots/tml.js
-bin/invalidate tml.js
+require 'json'
+require 'pp'
+require 'slop'
+
+def version
+  @version ||= begin
+    data = JSON.parse(File.read('./package.json'))
+    data['version']
+  end
+end
+
+opts = Slop.parse do |o|
+  o.string '-s', '--source', 'distribution version to deploy'
+  o.bool '-m', '--master', 'deploy as master version'
+  o.on '-v', '--version', 'prints current version' do
+    puts "Current version is #{version}"
+    exit
+  end
+end
+
+def execute(cmd)
+  puts "$ #{cmd}"
+  system(cmd)
+end
+
+if opts[:source]
+  if opts[:master]
+    puts "Deploying dist/tml-#{opts[:source]}.min.js as /tml.js ...\n\n"
+
+    execute("aws s3 cp dist/tml-#{opts[:source]}.min.js s3://trex-snapshots/tml.js")
+    execute("bin/invalidate tml.js")
+  else
+    puts "Deploying dist/tml-#{opts[:source]}.min.js as /tml-#{opts[:source]}.js ...\n\n"
+
+    execute("aws s3 cp dist/tml-#{opts[:source]}.min.js s3://trex-snapshots/tml-#{opts[:source]}.js")
+    execute("bin/invalidate tml-#{opts[:source]}.js")
+  end
+else
+  puts "Deploying current dist/tml-#{version}.min.js as /tml.js ...\n\n"
+
+  execute('grunt build')
+  execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tml.js")
+  execute("bin/invalidate tml.js")
+end
+
+puts "\n\nCongratulations, the library has been deployed...\n\n"
