@@ -106,7 +106,7 @@ module.exports = function(grunt) {
         src: ['lib/index.js'],
         dest: 'dist/tml-<%= pkg.version %>.js',
         options: {
-          exclude: ['request', 'redis', 'memcached']
+          exclude: ['request', 'redis', 'memcached', 'zlib', 'fs']
         }
       }
     },
