@@ -11,18 +11,20 @@ router.get('/', function(req, res) {
 });
 
 router.get('/tml.js', function(req, res) {
-  fs.readFile(path.join(__dirname, '../../dist', 'tml-'+pckg.version+'.js'), 'utf8', function(err,data){
+  var filePath = path.join(__dirname, '../../dist', 'tml-'+pckg.version+'.js');
+  console.log("Serving " + filePath);
+  fs.readFile(filePath, 'utf8', function(err,data){
     res.send(data);  
   });
 });
 
 router.get('/tml.min.js', function(req, res) {
-  fs.readFile(path.join(__dirname, '../../dist', 'tml-'+pckg.version+'.min.js'), 'utf8', function(err,data){
+  var filePath = path.join(__dirname, '../../dist', 'tml-'+pckg.version+'.min.js');
+  console.log("Serving " + filePath);
+  fs.readFile(filePath, 'utf8', function(err,data){
     res.send(data);  
   });
 });
-
-
 
 module.exports = router;
 
