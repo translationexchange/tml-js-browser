@@ -12,37 +12,63 @@ def version
 end
 
 opts = Slop.parse do |o|
-  o.string '-s', '--source', 'distribution version to deploy'
-  o.bool '-m', '--master', 'deploy as master version'
-  o.on '-v', '--version', 'prints current version' do
+  o.bool    '-u', '--update', 'indicates that you are updating a version, requires invalidation'
+  o.bool    '-l', '--latest', 'indicates that you are updating the edge/latest version'
+  o.on      '-v', '--version', 'prints current version of the SDK (for sanity check)' do
     puts "Current version is #{version}"
     exit
   end
 end
 
 def execute(cmd)
+  puts "\n***************************************************************************"
   puts "$ #{cmd}"
   system(cmd)
 end
 
-if opts[:source]
-  if opts[:master]
-    puts "Deploying dist/tml-#{opts[:source]}.min.js as /tml.js ...\n\n"
+# Notes:
+#
+# To update a version
+#   1. Update package.json
+#   2. Update index.js - yeah, we copy it for now
+#   3. Deploy
+#
+# We always build to the version folder under tools:
+#   cdn.translationexchange.com/tools/tml/${version}/tml.js
+#   cdn.translationexchange.com/tools/tml/${version}/tml.min.js
+#
+# Optionally, if you say so, we will build under latest:
+#   cdn.translationexchange.com/tools/tml/latest/tml.js
+#   cdn.translationexchange.com/tools/tml/latest/tml.min.js
+#
+# If you must make changes to older versions:
+#   1. branch it from that version:  git checkout -b 0.1.0 0.1.0
+#   2. make changes you want and cherry pick them back to develop (or the other way around)
+#   3. run deploy script from the branch - it will update the appropriate version
 
-    execute("aws s3 cp dist/tml-#{opts[:source]}.min.js s3://trex-snapshots/tml.js")
-    execute("bin/invalidate tml.js")
-  else
-    puts "Deploying dist/tml-#{opts[:source]}.min.js as /tml-#{opts[:source]}.js ...\n\n"
-
-    execute("aws s3 cp dist/tml-#{opts[:source]}.min.js s3://trex-snapshots/tml-#{opts[:source]}.js")
-    execute("bin/invalidate tml-#{opts[:source]}.js")
-  end
-else
-  puts "Deploying current dist/tml-#{version}.min.js as /tml.js ...\n\n"
-
-  execute('grunt build')
-  execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tml.js")
-  execute("bin/invalidate tml.js")
+# Let's first tag the version in github, unless you are updating an existing version
+if !opts[:update]
+  puts "Tagging current version as #{version}"
+  execute("git tag #{version}")
+  execute("git push")
 end
 
-puts "\n\nCongratulations, the library has been deployed...\n\n"
+puts "Deploying current dist/tml-#{version}.js as tools/tml/#{version}/tml.js ...\n\n"
+
+execute('(grunt build)')
+execute("aws s3 cp dist/tml-#{version}.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
+execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
+
+# if you are updating a version that is already there, tell us so
+if opts[:update]
+  execute("bin/invalidate tools/tml/#{version}/tml.js tools/tml/#{version}/tml.min.js")
+end
+
+# only if you say so, update the latest
+if opts[:latest]
+  execute("aws s3 cp dist/tml-#{version}.js s3://trex-snapshots/tools/tml/latest/tml.js")
+  execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tools/tml/latest/tml.min.js")
+  execute("bin/invalidate tools/tml/latest/tml.js tools/tml/latest/tml.min.js")
+end
+
+puts "\n\nCongratulations, the tml v#{version} has been deployed...\n\n"

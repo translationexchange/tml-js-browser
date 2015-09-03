@@ -1,14 +1,15 @@
 {
   "name": "tml-js-browser",
   "description": "Translation plugin for browsers.",
-  "version": "0.2.20",
+  "version": "0.3.0",
   "author": {
     "name": "Michael Berkovich",
     "email": "michael@translationexchange.com"
   },
   "maintainers": [
     "Michael Berkovich <michael@translationexchange.com>",
-    "Ian McDaniels <ian@translationexchange.com>"
+    "Ian McDaniels <ian@translationexchange.com>",
+    "Eli Rapoport <eli@translationexchange.com>"
   ],
   "bugs": {
     "url": "https://github.com/translationexchange/tml-js-browser/issues"
