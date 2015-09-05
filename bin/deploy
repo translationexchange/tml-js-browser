@@ -12,8 +12,7 @@ def version
 end
 
 opts = Slop.parse do |o|
-  o.bool    '-u', '--update', 'indicates that you are updating a version, requires invalidation'
-  o.bool    '-l', '--latest', 'indicates that you are updating the edge/latest version'
+  o.bool    '-s', '--stable', 'indicates that you are updating the stable version'
   o.on      '-v', '--version', 'prints current version of the SDK (for sanity check)' do
     puts "Current version is #{version}"
     exit
@@ -47,28 +46,22 @@ end
 #   3. run deploy script from the branch - it will update the appropriate version
 
 # Let's first tag the version in github, unless you are updating an existing version
-if !opts[:update]
-  puts "Tagging current version as #{version}"
-  execute("git tag #{version}")
-  execute("git push")
-end
+puts "Tagging current version as #{version}"
+execute("git tag #{version}")
+execute("git push")
 
 puts "Deploying current dist/tml-#{version}.js as tools/tml/#{version}/tml.js ...\n\n"
 
 execute('(grunt build)')
 execute("aws s3 cp dist/tml-#{version}.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
 execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
+execute("bin/invalidate tools/tml/#{version}/tml.js tools/tml/#{version}/tml.min.js")
 
-# if you are updating a version that is already there, tell us so
-if opts[:update]
-  execute("bin/invalidate tools/tml/#{version}/tml.js tools/tml/#{version}/tml.min.js")
-end
-
-# only if you say so, update the latest
-if opts[:latest]
-  execute("aws s3 cp dist/tml-#{version}.js s3://trex-snapshots/tools/tml/latest/tml.js")
-  execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tools/tml/latest/tml.min.js")
-  execute("bin/invalidate tools/tml/latest/tml.js tools/tml/latest/tml.min.js")
+# only if you say so, update the stable release
+if opts[:stable]
+  execute("aws s3 cp dist/tml-#{version}.js s3://trex-snapshots/tools/tml/stable/tml.js")
+  execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
+  execute("bin/invalidate tools/tml/stable/tml.js tools/tml/stable/tml.min.js")
 end
 
 puts "\n\nCongratulations, the tml v#{version} has been deployed...\n\n"
