@@ -1,7 +1,7 @@
 {
   "name": "tml-js-browser",
   "description": "Translation plugin for browsers.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": {
     "name": "Michael Berkovich",
     "email": "michael@translationexchange.com"
