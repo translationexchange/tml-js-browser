@@ -13,10 +13,15 @@ end
 
 opts = Slop.parse do |o|
   o.bool    '-s', '--stable', 'indicates that you are updating the stable version'
+  o.string  '-e', '--environment' , 'indicates the desired environment you wish to deploy to', default: 'staging'
   o.on      '-v', '--version', 'prints current version of the SDK (for sanity check)' do
     puts "Current version is #{version}"
     exit
   end
+end
+
+def version_or_environment(opts)
+  opts[:environment] == 'production' ? version : opts[:environment]
 end
 
 def execute(cmd)
@@ -45,20 +50,20 @@ end
 #   2. make changes you want and cherry pick them back to develop (or the other way around)
 #   3. run deploy script from the branch - it will update the appropriate version
 
-# Let's first tag the version in github, unless you are updating an existing version
-puts "Tagging current version as #{version}"
-execute("git tag #{version}")
-execute("git push")
 
-puts "Deploying current dist/tml.js as tools/tml/#{version}/tml.js ...\n\n"
+puts "Deploying current dist/tml-#{version}.js as tools/tml/#{version_or_environment(opts)}/tml.js ...\n\n"
 
 execute('(grunt build)')
-execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
-execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
-execute("bin/invalidate tools/tml/#{version}/tml.js tools/tml/#{version}/tml.min.js")
+execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version_or_environment(opts)}/tml.js")
+execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version_or_environment(opts)}/tml.min.js")
+execute("bin/invalidate tools/tml/#{version}/tml.js tools/tml/#{version_or_environment(opts)}/tml.min.js")
 
 # only if you say so, update the stable release
-if opts[:stable]
+if opts[:stable] and opts[:environment] == 'production'
+  puts "Tagging current version as #{version}"
+  execute("git tag #{version}")
+  execute("git push")
+
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
   execute("bin/invalidate tools/tml/stable/tml.js tools/tml/stable/tml.min.js")
