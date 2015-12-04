@@ -26,6 +26,7 @@
     "test",
     "tests",
     "coverage",
-    "bin"
+    "bin",
+    "srv"
   ]
 }
