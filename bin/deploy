@@ -50,17 +50,17 @@ puts "Tagging current version as #{version}"
 execute("git tag #{version}")
 execute("git push")
 
-puts "Deploying current dist/tml-#{version}.js as tools/tml/#{version}/tml.js ...\n\n"
+puts "Deploying current dist/tml.js as tools/tml/#{version}/tml.js ...\n\n"
 
 execute('(grunt build)')
-execute("aws s3 cp dist/tml-#{version}.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
-execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
+execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
+execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
 execute("bin/invalidate tools/tml/#{version}/tml.js tools/tml/#{version}/tml.min.js")
 
 # only if you say so, update the stable release
 if opts[:stable]
-  execute("aws s3 cp dist/tml-#{version}.js s3://trex-snapshots/tools/tml/stable/tml.js")
-  execute("aws s3 cp dist/tml-#{version}.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
+  execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
+  execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
   execute("bin/invalidate tools/tml/stable/tml.js tools/tml/stable/tml.min.js")
 end
 

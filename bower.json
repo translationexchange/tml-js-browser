@@ -1,0 +1,31 @@
+{
+  "name": "tml-js",
+  "description": "Translation plugin for browsers.",
+  "authors": [
+    "Ian McDaniel", 
+    "Michael Berkovich"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "internationalization",
+    "translation",
+    "localization",
+    "translate",
+    "localize",
+    "i18n",
+    "t9n",
+    "tr8n",
+    "l10n",
+    "tml"
+  ],
+  "homepage": "https://github.com/translationexchange/tml-js-browser",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests",
+    "coverage",
+    "bin"
+  ]
+}

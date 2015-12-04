@@ -104,7 +104,7 @@ module.exports = function(grunt) {
     browserify: {
       dist: {
         src: ['lib/index.js'],
-        dest: 'dist/tml-<%= pkg.version %>.js',
+        dest: 'dist/tml.js',
         options: {
           exclude: ['request', 'redis', 'memcached', 'zlib', 'fs']
         }
@@ -117,7 +117,7 @@ module.exports = function(grunt) {
       },
       dist: {
         files: {
-          'dist/tml-<%= pkg.version %>.min.js': ['<%= browserify.dist.dest %>']
+          'dist/tml.min.js': ['<%= browserify.dist.dest %>']
         }
       }
     },
