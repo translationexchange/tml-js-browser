@@ -30,27 +30,6 @@ def execute(cmd)
   system(cmd)
 end
 
-# Notes:
-#
-# To update a version
-#   1. Update package.json
-#   2. Update index.js - yeah, we copy it for now
-#   3. Deploy
-#
-# We always build to the version folder under tools:
-#   cdn.translationexchange.com/tools/tml/${version}/tml.js
-#   cdn.translationexchange.com/tools/tml/${version}/tml.min.js
-#
-# Optionally, if you say so, we will build under latest:
-#   cdn.translationexchange.com/tools/tml/latest/tml.js
-#   cdn.translationexchange.com/tools/tml/latest/tml.min.js
-#
-# If you must make changes to older versions:
-#   1. branch it from that version:  git checkout -b 0.1.0 0.1.0
-#   2. make changes you want and cherry pick them back to develop (or the other way around)
-#   3. run deploy script from the branch - it will update the appropriate version
-
-
 puts "Deploying current dist/tml-#{version}.js as tools/tml/#{version_or_environment(opts)}/tml.js ...\n\n"
 
 execute('(grunt build)')
