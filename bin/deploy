@@ -3,16 +3,51 @@
 require 'json'
 require 'pp'
 require 'slop'
+require 'rubygems'
+require 'hmac-sha1'
+require 'net/https'
+require 'base64'
+
+def package_path
+  './package.json'
+end
+
+def package
+  @package ||= JSON.parse(File.read(package_path))
+end
 
 def version
-  @version ||= begin
-    data = JSON.parse(File.read('./package.json'))
-    data['version']
+  package['version']
+end
+
+def build_number
+  version.split('.').last.to_i
+end
+
+def increment_build_number
+  parts = version.split('.')
+  parts[parts.count-1] = build_number + 1
+  package['version'] = parts.join('.')
+
+  File.open(package_path, 'w') do |file|
+    file.write(JSON.pretty_generate(package))
+  end
+end
+
+def execute(cmd)
+  puts "\n***************************************************************************"
+  puts "$ #{cmd}"
+
+  return
+
+  result = system(cmd)
+  if result == 1
+    pp 'Failed to deploy'
+    exit
   end
 end
 
 opts = Slop.parse do |o|
-  o.bool    '-s', '--stable', 'indicates that you are updating the stable version'
   o.string  '-e', '--environment' , 'indicates the desired environment you wish to deploy to', default: 'staging'
   o.on      '-v', '--version', 'prints current version of the SDK (for sanity check)' do
     puts "Current version is #{version}"
@@ -24,28 +59,83 @@ def version_or_environment(opts)
   opts[:environment] == 'production' ? version : opts[:environment]
 end
 
-def execute(cmd)
-  puts "\n***************************************************************************"
-  puts "$ #{cmd}"
-  system(cmd)
+def invalidate(files, opts)
+  unless ['production', 'staging'].include?(opts[:environment])
+    return
+  end
+
+  puts "Invalidating #{files.count} files..."
+
+  s3_access=ENV['AWS_ACCESS_KEY_ID']
+  s3_secret=ENV['AWS_SECRET_ACCESS_KEY']
+  cf_distribution=ENV['AWS_CLOUDFRONT_ID']
+  # cf_distribution = (opts[:environment] == 'production' ? 'E35QZODDH20GLZ' : 'E23DCFS01SRZCW')
+
+  paths = '<Path>/' + files.join('</Path><Path>/') + '</Path>'
+
+  date = Time.now.utc
+  date = date.strftime("%a, %d %b %Y %H:%M:%S %Z")
+  digest = HMAC::SHA1.new(s3_secret)
+  digest << date
+
+  uri = URI.parse('https://cloudfront.amazonaws.com/2010-08-01/distribution/' + cf_distribution + '/invalidation')
+
+  req = Net::HTTP::Post.new(uri.path)
+  req.initialize_http_header({
+    'x-amz-date' => date,
+    'Content-Type' => 'text/xml',
+    'Authorization' => "AWS %s:%s" % [s3_access, Base64.encode64(digest.digest)]
+  })
+
+  req.body = "<InvalidationBatch>" + paths + "<CallerReference>ref_#{Time.now.utc.to_i}</CallerReference></InvalidationBatch>"
+
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = true
+  http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+  res = http.request(req)
+
+  puts res.body
 end
 
 puts "Deploying current dist/tml-#{version}.js as tools/tml/#{version_or_environment(opts)}/tml.js ...\n\n"
 
+# increment version
+pp("Incrementing build number to #{build_number + 1}...")
+increment_build_number
+
+# check in the new version
+execute("git add package.json")
+execute("git commit -m 'Incremented build version to #{version}'")
+
 execute('(grunt build)')
-execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version_or_environment(opts)}/tml.js")
-execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version_or_environment(opts)}/tml.min.js")
-execute("bin/invalidate tools/tml/#{version}/tml.js tools/tml/#{version_or_environment(opts)}/tml.min.js")
 
-# only if you say so, update the stable release
-if opts[:stable] and opts[:environment] == 'production'
-  puts "Tagging current version as #{version}"
-  execute("git tag #{version}")
+# check in the new version
+execute("git add dist")
+execute("git commit -m 'Updated distribution for version #{version}'")
+
+# push to github
+execute("git push")
+
+if opts[:environment] == 'production'
+  execute("git checkout master")
+  execute("git merge develop")
+  execute("git tag '#{version}'")
   execute("git push")
-
-  execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
-  execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
-  execute("bin/invalidate tools/tml/stable/tml.js tools/tml/stable/tml.min.js")
+  execute("npm publish")
 end
 
+execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version_or_environment(opts)}/tml.js")
+execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version_or_environment(opts)}/tml.min.js")
+invalidate(["tools/tml/#{version_or_environment(opts)}/tml.js", "tools/tml/#{version_or_environment(opts)}/tml.min.js"], opts)
+
+# only if you say so, update the stable release
+if opts[:environment] == 'production'
+  execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
+  execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
+  invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
+end
+
+execute("git checkout develop")
+
 puts "\n\nCongratulations, the tml v#{version} has been deployed...\n\n"
+
