@@ -97,7 +97,7 @@ def invalidate(files, opts)
 end
 
 # increment version
-pp("Incrementing build number to #{build_number + 1}...")
+puts("Incrementing build number to #{build_number + 1}...\n")
 increment_build_number
 
 pp("Deploying version #{version} to tools/tml/#{version_or_environment(opts)}/tml.js...")
@@ -121,22 +121,28 @@ if opts[:environment] == 'production'
   execute("git tag '#{version}'")
   execute("git push")
   execute("npm publish")
-end
 
-if opts[:environment] == 'production'
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
+
   if opts[:stable]
     execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
     execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
     invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
+    execute("open https://cdn.translationexchange.com/tools/tml/stable/tml.min.js")
+  else
+    execute("open https://cdn.translationexchange.com/tools/tml/#{version}/tml.min.js")
   end
+
   execute("git checkout develop")
+
 else
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{opts[:environment]}/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{opts[:environment]}/tml.min.js")
   invalidate(["tools/tml/#{opts[:environment]}/tml.js", "tools/tml/#{opts[:environment]}/tml.min.js"], opts)
+
+  execute("open https://cdn.translationexchange.com/tools/tml/0.4.14/tml.min.js")
 end
 
-pp("\n\nCongratulations, the tml v#{version} has been deployed...")
+puts("\n\nCongratulations, the tml v#{version} has been deployed...")
 
