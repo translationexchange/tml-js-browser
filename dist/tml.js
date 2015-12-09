@@ -538,13 +538,15 @@ var helpers = {
   },
 
   includeAgent: function(app, options, callback) {
-    var agent_host = options.host || "https://cdn.translationexchange.com/tools/agent/stable/agent.min.js";
+    var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
     if (options.cache) {
       var t = new Date().getTime();
       t = t - (t % options.cache);
       agent_host += "?ts=" + t;
     }
+
+    tml.logger.debug("loading agent from " + agent_host);
 
     utils.addJS(window.document, 'tml-agent', agent_host, function() {
       Trex.init(app.key, options);
@@ -5427,7 +5429,7 @@ var scripts = {
 
     if (options.agent.type == "agent") {
 
-      var agent_host = options.agent.host || "https://tools.translationexchange.com/agent/agent.min.js";
+      var agent_host = options.agent.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
       if (options.agent.cache) {
         var t = new Date().getTime();
