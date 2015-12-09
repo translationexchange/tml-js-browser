@@ -67,8 +67,7 @@ def invalidate(files, opts)
 
   s3_access=ENV['AWS_ACCESS_KEY_ID']
   s3_secret=ENV['AWS_SECRET_ACCESS_KEY']
-  cf_distribution=ENV['AWS_CLOUDFRONT_ID']
-  # cf_distribution = (opts[:environment] == 'production' ? 'E35QZODDH20GLZ' : 'E23DCFS01SRZCW')
+  cf_distribution=ENV['AWS_CLOUDFRONT_CDN_ID']
 
   paths = '<Path>/' + files.join('</Path><Path>/') + '</Path>'
 

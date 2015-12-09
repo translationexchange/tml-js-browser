@@ -546,6 +546,8 @@ var helpers = {
       agent_host += "?ts=" + t;
     }
 
+    tml.logger.debug("loading agent from " + agent_host);
+
     utils.addJS(window.document, 'tml-agent', agent_host, function() {
       Trex.init(app.key, options);
       if (callback)
