@@ -538,7 +538,7 @@ var helpers = {
   },
 
   includeAgent: function(app, options, callback) {
-    var agent_host = options.host || "https://cdn.translationexchange.com/tools/agent/stable/agent.min.js";
+    var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
     if (options.cache) {
       var t = new Date().getTime();
@@ -5429,7 +5429,7 @@ var scripts = {
 
     if (options.agent.type == "agent") {
 
-      var agent_host = options.agent.host || "https://tools.translationexchange.com/agent/agent.min.js";
+      var agent_host = options.agent.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
       if (options.agent.cache) {
         var t = new Date().getTime();
