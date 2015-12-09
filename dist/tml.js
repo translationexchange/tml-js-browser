@@ -5416,9 +5416,22 @@ var scripts = {
 
     //console.log(options.agent);
 
-    if (options.agent && options.agent.type == "agent") {
+    if (!options.agent) {
+      options.agent = {
+        type: 'agent',
+        cache: 864000000
+      };
+    }
 
-      var agent_host = options.agent.host || "https://cdn.translationexchange.com/tools/agent/" + options.agent.version + "/agent.min.js";
+    if (options.agent.type == "agent") {
+
+      var agent_host = options.agent.host || "https://tools.translationexchange.com/agent/agent.min.js";
+
+      if (options.agent.cache) {
+        var t = new Date().getTime();
+        t = t - (t % options.agent.cache);
+        agent_host += "?ts=" + t;
+      }
 
       html.push("(function() {");
       html.push("   tml_add_script(window.document, 'tml-agent', '" + agent_host + "', function() {");

@@ -1,7 +1,7 @@
 {
   "name": "tml-js-browser",
   "description": "Translation plugin for browsers.",
-  "version": "0.4.5",
+  "version": "0.4.10",
   "author": {
     "name": "Michael Berkovich",
     "email": "michael@translationexchange.com"
@@ -40,34 +40,34 @@
     "tml"
   ],
   "scripts": {
-    "start":  "node ./srv/bin/www",
-    "test":   "grunt test"
+    "start": "node ./srv/bin/www",
+    "test": "grunt test"
   },
   "dependencies": {
-    "tml-js":               "~0.4.2"
+    "tml-js": "~0.4.9"
   },
   "devDependencies": {
-    "blanket":              "~1.1.7",
-    "browserify":           "~8.1.3",
-    "coveralls":            "~2.11.4",
-    "grunt":                "~0.4.5",
-    "grunt-blanket":        "~0.0.8",
-    "grunt-browserify":     "^3.3.0",
-    "grunt-contrib-clean":  "~0.6.0",
-    "grunt-contrib-copy":   "~0.8.0",
+    "blanket": "~1.1.7",
+    "browserify": "~8.1.3",
+    "coveralls": "~2.11.4",
+    "grunt": "~0.4.5",
+    "grunt-blanket": "~0.0.8",
+    "grunt-browserify": "^3.3.0",
+    "grunt-contrib-clean": "~0.6.0",
+    "grunt-contrib-copy": "~0.8.0",
     "grunt-contrib-jshint": "~0.11.3",
     "grunt-contrib-uglify": "~0.7.0",
-    "grunt-contrib-watch":  "~0.6.1",
-    "grunt-coveralls":      "~1.0.0",
-    "grunt-jsdoc":          "~0.5.8",
-    "grunt-karma":          "~0.10.1",
-    "grunt-mocha-test":     "~0.12.7",
-    "karma":                "~0.12.37",
-    "mocha":                "~2.3.2",
-    "mocha-lcov-reporter":  "~0.0.1",
-    "phantomjs":            "~1.9.15",
-    "proxyquire":           "~1.7.2",
-    "travis-cov":           "~0.2.5"
+    "grunt-contrib-watch": "~0.6.1",
+    "grunt-coveralls": "~1.0.0",
+    "grunt-jsdoc": "~0.5.8",
+    "grunt-karma": "~0.10.1",
+    "grunt-mocha-test": "~0.12.7",
+    "karma": "~0.12.37",
+    "mocha": "~2.3.2",
+    "mocha-lcov-reporter": "~0.0.1",
+    "phantomjs": "~1.9.15",
+    "proxyquire": "~1.7.2",
+    "travis-cov": "~0.2.5"
   },
   "config": {
     "travis-cov": {
