@@ -141,7 +141,7 @@ else
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{opts[:environment]}/tml.min.js")
   invalidate(["tools/tml/#{opts[:environment]}/tml.js", "tools/tml/#{opts[:environment]}/tml.min.js"], opts)
 
-  execute("open https://cdn.translationexchange.com/tools/tml/0.4.14/tml.min.js")
+  execute("open https://cdn.translationexchange.com/tools/tml/#{opts[:environment]}/tml.min.js")
 end
 
 puts("\n\nCongratulations, the tml v#{version} has been deployed...")
