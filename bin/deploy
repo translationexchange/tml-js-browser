@@ -46,6 +46,7 @@ def execute(cmd)
 end
 
 opts = Slop.parse do |o|
+  o.string  '-s', '--stable' , 'indicates that stable section needs to be updated', default: false
   o.string  '-e', '--environment' , 'indicates the desired environment you wish to deploy to', default: 'staging'
   o.on      '-v', '--version', 'prints current version of the SDK (for sanity check)' do
     puts "Current version is #{version}"
@@ -119,6 +120,7 @@ if opts[:environment] == 'production'
   execute("git merge develop")
   execute("git tag '#{version}'")
   execute("git push")
+  execute("npm publish")
 end
 
 execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version_or_environment(opts)}/tml.js")
@@ -126,7 +128,7 @@ execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version_or_en
 invalidate(["tools/tml/#{version_or_environment(opts)}/tml.js", "tools/tml/#{version_or_environment(opts)}/tml.min.js"], opts)
 
 # only if you say so, update the stable release
-if opts[:environment] == 'production'
+if opts[:environment] == 'production' and opts[:stable]
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
   invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
@@ -136,5 +138,5 @@ if opts[:environment] == 'production'
   execute("git checkout develop")
 end
 
-puts "\n\nCongratulations, the tml v#{version} has been deployed...\n\n"
+pp("\n\nCongratulations, the tml v#{version} has been deployed...")
 
