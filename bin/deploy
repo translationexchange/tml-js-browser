@@ -95,11 +95,11 @@ def invalidate(files, opts)
   puts res.body
 end
 
-puts "Deploying current dist/tml-#{version}.js as tools/tml/#{version_or_environment(opts)}/tml.js ...\n\n"
-
 # increment version
 pp("Incrementing build number to #{build_number + 1}...")
 increment_build_number
+
+pp("Deploying version #{version} to tools/tml/#{version_or_environment(opts)}/tml.js...")
 
 # check in the new version
 execute("git add package.json")
@@ -133,7 +133,9 @@ if opts[:environment] == 'production'
   invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
 end
 
-execute("git checkout develop")
+if opts[:environment] == 'production'
+  execute("git checkout develop")
+end
 
 puts "\n\nCongratulations, the tml v#{version} has been deployed...\n\n"
 
