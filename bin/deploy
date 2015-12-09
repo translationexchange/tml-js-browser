@@ -38,8 +38,6 @@ def execute(cmd)
   puts "\n***************************************************************************"
   puts "$ #{cmd}"
 
-  return
-
   result = system(cmd)
   if result == 1
     pp 'Failed to deploy'
