@@ -538,7 +538,14 @@ var helpers = {
   },
 
   includeAgent: function(app, options, callback) {
-    var agent_host = options.host || "https://cdn.translationexchange.com/tools/agent/" + options.version + "/agent.min.js";
+    var agent_host = options.host || "https://cdn.translationexchange.com/tools/agent/stable/agent.min.js";
+
+    if (options.cache) {
+      var t = new Date().getTime();
+      t = t - (t % options.cache);
+      agent_host += "?ts=" + t;
+    }
+
     utils.addJS(window.document, 'tml-agent', agent_host, function() {
       Trex.init(app.key, options);
       if (callback)
@@ -778,30 +785,25 @@ tml = tml.utils.extend(tml, {
 
         if (!options.agent) {
           options.agent = {
-            enabled: true,
-            version: "latest",
-            type:    "tools"
+            type:   'agent',
+            cache:  864000000
           };
         }
 
-        if (options.agent.enabled) {
-          if (options.agent.type == "agent") {
-            helpers.includeAgent(tml.app, {
-              host:     options.agent.host,
-              version:  options.agent.version || "stable",
-              domains:  options.agent.domains || {},
-              locale:   options.current_locale,
-              source:   options.current_source
-            }, function () {
-              if (callback) callback();
-            });
-          } else {
-            helpers.includeTools(tml.app, options.current_locale, function () {
-              if (callback) callback();
-            });
-          }
+        if (options.agent.type == "agent") {
+          helpers.includeAgent(tml.app, {
+            host:     options.agent.host,
+            cache:    options.agent.cache,
+            domains:  options.agent.domains || {},
+            locale:   options.current_locale,
+            source:   options.current_source
+          }, function () {
+            if (callback) callback();
+          });
         } else {
-          if (callback) callback();
+          helpers.includeTools(tml.app, options.current_locale, function () {
+            if (callback) callback();
+          });
         }
 
         if (typeof(options.onLoad) == "function") {
