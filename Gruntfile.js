@@ -10,6 +10,7 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-coveralls');
   grunt.loadNpmTasks('grunt-mocha-test');
   grunt.loadNpmTasks('grunt-jsdoc');
+  grunt.loadNpmTasks('grunt-preprocess');
 
   grunt.initConfig({
     pkg: grunt.file.readJSON('package.json'),
@@ -145,13 +146,26 @@ module.exports = function(grunt) {
       all: {
         src: 'reports/lcov.info'
       }
+    },
+
+    preprocess : {
+      inline : {
+        src : [ 'dist/tml.js' ],
+        options: {
+          inline : true,
+          context : { 
+            NODE_ENV: process.env.NODE_ENV || 'development',
+            VERSION: '<%= pkg.version %>'
+          }
+        }
+      }
     }
   });
 
   //grunt.registerTask('test', ['jshint', 'blanket', 'copy', 'mochaTest', 'coveralls']);
   grunt.registerTask('test', ['jshint', 'blanket', 'copy', 'mochaTest']);
   grunt.registerTask('docs', ['jsdoc']);
-  grunt.registerTask('build', ['jshint','browserify','uglify']);
+  grunt.registerTask('build', ['jshint','browserify','preprocess','uglify']);
 
   // Default task(s).
   grunt.registerTask('default', ['test']);
