@@ -250,8 +250,10 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
    * @returns {Configuration.getApiAdapter|*}
    */
   getRequest: function() {
-    if (!this.ajax)
-      this.ajax = new tml.config.getApiAdapter('ajax');
+    if (!this.ajax) {
+      var adapter = tml.config.getApiAdapter('ajax');
+      this.ajax = new adapter();
+    }
 
     return this.ajax;
   },
@@ -798,7 +800,8 @@ tml = tml.utils.extend(tml, {
             cache:    options.agent.cache,
             domains:  options.agent.domains || {},
             locale:   options.current_locale,
-            source:   options.current_source
+            source:   options.current_source,
+            languages: tml.app.languages
           }, function () {
             if (callback) callback();
           });
@@ -5434,6 +5437,18 @@ var scripts = {
 
       var agent_host = options.agent.host || "https://cdn.translationexchange.com/tools/agent/" + options.agent.version + "/agent.min.js";
 
+      options.agent.languages = [];
+
+      for (var l = 0; l < app.languages.length; l++) {
+        var language = app.languages[l];
+        options.agent.languages.push({
+          locale: language.locale,
+          english_name: language.english_name,
+          native_name: language.native_name,
+          flag_url: language.flag_url
+        });
+      }
+
       html.push("(function() {");
       html.push("   tml_add_script(window.document, 'tml-agent', '" + agent_host + "', function() {");
       html.push("       Trex.init('" + app.key + "', " + JSON.stringify(options.agent) + ");");
@@ -5476,9 +5491,9 @@ var scripts = {
 
       if (app.isFeatureEnabled("shortcuts")) {
         var keys = Object.keys(app.shortcuts || {});
-        for (var i = 0; i < keys.length; i++) {
-          html.push("shortcut.add('" + keys[i] + "', function() {");
-          html.push(app.shortcuts[keys[i]]);
+        for (var s = 0; s < keys.length; s++) {
+          html.push("shortcut.add('" + keys[s] + "', function() {");
+          html.push(app.shortcuts[keys[s]]);
           html.push("});");
         }
       }
@@ -7172,6 +7187,9 @@ Source.prototype = {
 
   updateTranslations: function(locale, results) {
     results = results && results.results ? results.results : results;
+
+    // check if results is an array
+    // build keys from the label + description
 
     var keys = utils.keys(results);
 

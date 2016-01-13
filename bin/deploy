@@ -134,7 +134,7 @@ if opts[:environment] == 'production'
   end
 
   execute("git checkout develop")
-
+ 
 else
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{opts[:environment]}/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{opts[:environment]}/tml.min.js")
