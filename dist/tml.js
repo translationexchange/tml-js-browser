@@ -688,7 +688,7 @@ var DEFAULT_HOST  = "https://api.translationexchange.com";
 var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
 tml = tml.utils.extend(tml, {
-  version: '0.4.24',
+  version: '0.4.25',
 
   app:            null,
   block_options:  [],
