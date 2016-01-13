@@ -7191,6 +7191,9 @@ Source.prototype = {
   updateTranslations: function(locale, results) {
     results = results && results.results ? results.results : results;
 
+    // check if results is an array
+    // build keys from the label + description
+
     var keys = utils.keys(results);
 
     this.translations[locale] = this.translations[locale] || [];
