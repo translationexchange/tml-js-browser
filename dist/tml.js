@@ -250,8 +250,10 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
    * @returns {Configuration.getApiAdapter|*}
    */
   getRequest: function() {
-    if (!this.ajax)
-      this.ajax = new tml.config.getApiAdapter('ajax');
+    if (!this.ajax) {
+      var adapter = tml.config.getApiAdapter('ajax');
+      this.ajax = new adapter();
+    }
 
     return this.ajax;
   },
@@ -5492,9 +5494,9 @@ var scripts = {
 
       if (app.isFeatureEnabled("shortcuts")) {
         var keys = Object.keys(app.shortcuts || {});
-        for (var i = 0; i < keys.length; i++) {
-          html.push("shortcut.add('" + keys[i] + "', function() {");
-          html.push(app.shortcuts[keys[i]]);
+        for (var s = 0; s < keys.length; s++) {
+          html.push("shortcut.add('" + keys[s] + "', function() {");
+          html.push(app.shortcuts[keys[s]]);
           html.push("});");
         }
       }
