@@ -798,7 +798,8 @@ tml = tml.utils.extend(tml, {
             cache:    options.agent.cache,
             domains:  options.agent.domains || {},
             locale:   options.current_locale,
-            source:   options.current_source
+            source:   options.current_source,
+            languages: tml.app.languages
           }, function () {
             if (callback) callback();
           });
@@ -5435,6 +5436,18 @@ var scripts = {
         var t = new Date().getTime();
         t = t - (t % options.agent.cache);
         agent_host += "?ts=" + t;
+      }
+
+      options.agent.languages = [];
+
+      for (var l = 0; l < app.languages.length; l++) {
+        var language = app.languages[l];
+        options.agent.languages.push({
+          locale: language.locale,
+          english_name: language.english_name,
+          native_name: language.native_name,
+          flag_url: language.flag_url
+        });
       }
 
       html.push("(function() {");
