@@ -511,34 +511,6 @@ var helpers = {
     );
   },
 
-  includeTools: function(app, locale, callback) {
-    utils.addCSS(window.document, app.tools.stylesheet, false);
-    utils.addCSS(window.document, app.css, true);
-
-    utils.addJS(window.document, 'tml-jssdk', app.tools.javascript, function() {
-      Tml.app_key = app.key;
-      Tml.host = app.tools.host;
-      Tml.current_source = app.current_source;
-      Tml.default_locale = app.default_locale;
-      Tml.page_locale = locale;
-      Tml.locale = locale;
-
-      var shortcutFn = function(sc){
-        return function() {
-          eval(app.shortcuts[sc]); // jshint ignore:line
-        };
-      };
-
-      if (app.isFeatureEnabled("shortcuts")) {
-        for (var sc in app.shortcuts) {
-          shortcut.add(sc, shortcutFn(sc));
-        }
-      }
-
-      if (callback) callback();
-    });
-  },
-
   includeAgent: function(app, options, callback) {
     var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
@@ -781,35 +753,24 @@ tml = tml.utils.extend(tml, {
         var t1 = new Date();
         tml.logger.debug("page render took " + (t1 - t0) + " mls");
 
-        tml.updateLanguageSelector();
-
         if ((options.translateTitle || options.translate_title) && document.title !== "") {
           document.title = tml.translateLabel(document.title);
         }
 
-        if (!options.agent) {
-          options.agent = {
-            type:   'agent',
-            cache:  864000000
-          };
-        }
+        if (!options.agent) options.agent = {};
 
-        if (options.agent.type == "agent") {
-          helpers.includeAgent(tml.app, {
-            host:     options.agent.host,
-            cache:    options.agent.cache,
-            domains:  options.agent.domains || {},
-            locale:   options.current_locale,
-            source:   options.current_source,
-            languages: tml.app.languages
-          }, function () {
-            if (callback) callback();
-          });
-        } else {
-          helpers.includeTools(tml.app, options.current_locale, function () {
-            if (callback) callback();
-          });
-        }
+        helpers.includeAgent(tml.app, {
+          host:       options.agent.host,
+          cache:      options.agent.cache || 864000000,
+          domains:    options.agent.domains || {},
+          locale:     options.current_locale,
+          source:     options.current_source,
+          sdk:        'tml-js v' + tml.version,
+          css:        tml.app.css,
+          languages:  tml.app.languages
+        }, function () {
+          if (callback) callback();
+        });
 
         if (typeof(options.onLoad) == "function") {
           options.onLoad(tml.app);
@@ -844,32 +805,6 @@ tml = tml.utils.extend(tml, {
   },
 
   /**
-   * Updates language selector
-   */
-  updateLanguageSelector: function() {
-    var languageSelector = document.querySelectorAll("[data-tml-language-selector], [tml-language-selector]");
-
-    if (languageSelector.length === 0) return;
-    for (var i=0; i<languageSelector.length; i++) {
-      var type = languageSelector[i].getAttribute("data-tml-language-selector");
-      type = type || 'popup';
-      var element = languageSelector[i].getAttribute("data-tml-language-selector-element");
-      element = element || 'div';
-      var toggle = languageSelector[i].getAttribute("data-tml-toggle") == 'true';
-      var toggle_label = languageSelector[i].getAttribute("data-tml-toggle-label");
-      var powered_by = languageSelector[i].getAttribute("data-tml-powered-by") == 'true';
-      languageSelector[i].innerHTML = tml.getLanguageSelector(type, {
-        element: element,
-        container: languageSelector[i],
-        toggle: toggle,
-        toggle_label: toggle_label,
-        powered_by: powered_by
-      });
-      tml.scripts.language_selector_init(tml.app, type);
-    }
-  },
-
-  /**
    * Changes language
    *
    * @param locale
@@ -881,8 +816,6 @@ tml = tml.utils.extend(tml, {
 
       if (this.tokenizer)
         this.tokenizer.updateAllNodes();
-
-      tml.updateLanguageSelector();
 
       if (tml.utils.isFunction(tml.options.onLanguageChange))
         tml.options.onLanguageChange(language);
@@ -1112,21 +1045,6 @@ tml = tml.utils.extend(tml, {
   },
 
   /**
-   * Generates a language selector
-   *
-   * @param type
-   * @param options
-   * @returns {*}
-   */
-  getLanguageSelector: function(type, options) {
-    options = tml.utils.merge(options || {}, {
-      current_language: tml.getCurrentLanguage(),
-      client_side: true
-    });
-    return tml.scripts.language_selector(tml.app, type, options);
-  },
-
-  /**
    * Encloses block options
    *
    * @param options
@@ -1178,7 +1096,6 @@ window.tml_application        = tml.getApplication;
 window.tml_current_source     = tml.getCurrentSource;
 window.tml_current_translator = tml.getCurrentTranslator;
 window.tml_current_language   = tml.getCurrentLanguage;
-window.tml_language_selector  = tml.getLanguageSelector;
 window.tml_block              = tml.block;
 window.tml_begin_block        = tml.beginBlock;
 window.tml_end_block          = tml.endBlock;
@@ -4233,7 +4150,8 @@ Application.prototype = {
 
     self.getApiClient().get("projects/current/definition", {
       locale: options.current_locale || (options.accepted_locales ? options.accepted_locales.join(',') : 'en'),
-      source: options.current_source
+      source: options.current_source,
+      ignored: true
     }, {
         cache_key: 'application'
     }, function (err, data) {
@@ -4420,6 +4338,7 @@ Application.prototype = {
           self.getApiClient().get("sources/" + key + '/translations', {
             locale: locale,
             sources: true,
+            ignored: true,
             per_page: 100000
           }, {
             cache_key: locale + '/sources' + utils.normalizePath(source)
@@ -5238,6 +5157,7 @@ var HTMLDecorator = {
   isEnabled: function(options) {
     if (!options) return false;
     if (options.skip_decorations) return false;
+    if (options.ignored) return false;
 
     return (
       options.current_translator &&
@@ -5440,6 +5360,8 @@ var scripts = {
         agent_host += "?ts=" + t;
       }
 
+      options.agent.css = app.css;
+      //options.agent.sdk = 'tml-js v' + Tml.version;
       options.agent.languages = [];
 
       for (var l = 0; l < app.languages.length; l++) {
@@ -6116,6 +6038,12 @@ Language.prototype = {
         this.application.verifySourcePath(current_source, source_path);
 
       var source = this.application.getSource(current_source);
+
+      if (source && source.isIgnoredKey(translation_key.key)) {
+        params.options.ignored = true;
+        return translation_key.translate(this, params.tokens, params.options);
+      }
+
       var cached_translations = source ? source.getTranslations(this.locale, translation_key.key) : null;
 
       if (cached_translations) {
@@ -7179,9 +7107,14 @@ var Source = function(attrs) {
 
   this.key = utils.generateSourceKey(attrs.source);
   this.translations = {};
+  this.ignored_keys = [];
 };
 
 Source.prototype = {
+
+  isIgnoredKey: function(key) {
+    return this.ignored_keys.indexOf(key) != -1;
+  },
 
   getTranslations: function(locale, key) {
     if (!this.translations[locale]) return null;
@@ -7189,6 +7122,7 @@ Source.prototype = {
   },
 
   updateTranslations: function(locale, results) {
+    this.ignored_keys = results && results.ignored_keys ? results.ignored_keys : [];
     results = results && results.results ? results.results : results;
 
     // check if results is an array
