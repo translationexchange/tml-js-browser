@@ -7,3 +7,4 @@ coverage.html
 srv/node_modules
 reports
 projectFilesBackup
+*.log
