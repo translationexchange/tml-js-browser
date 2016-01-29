@@ -134,7 +134,7 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
 });
 
 module.exports = Ajax;
-},{"tml-js":30}],2:[function(require,module,exports){
+},{"tml-js":31}],2:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -311,7 +311,7 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
 });
 
 module.exports = Browser;
-},{"tml-js":30}],3:[function(require,module,exports){
+},{"tml-js":31}],3:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -446,7 +446,7 @@ Inline.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
 });
 
 module.exports = Inline;
-},{"tml-js":30}],4:[function(require,module,exports){
+},{"tml-js":31}],4:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -618,7 +618,99 @@ module.exports = {
   setCookie:            helpers.setCookie,
   includeAgent:         helpers.includeAgent
 };
-},{"tml-js":30}],5:[function(require,module,exports){
+},{"tml-js":31}],5:[function(require,module,exports){
+
+var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var"];
+var scripts     = ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "code", "ruby"];
+var separators  = ["br", "hr"];
+
+module.exports = {
+
+  isEmptyString: function(str) {
+    return !str.replace(/[\s\n\r\t\0\x0b\xa0\xc2]/g, '');
+  },
+
+  isInline: function(node) {
+    return (
+      node.nodeType == 1 &&
+      !node.hasAttribute('isolate') &&
+      inline.indexOf(node.tagName.toLowerCase()) != -1 &&
+      !this.isOnlyChild(node)
+    );
+  },
+
+  hasInlineSiblings: function(node) {
+    return (
+      (node.parentNode && node.parentNode.childNodes.length > 1) &&
+      (node.previousSibling && (this.isInline(node.previousSibling) || this.isValidText(node.previousSibling))) ||
+      (node.nextSibling && (this.isInline(node.nextSibling) || this.isValidText(node.nextSibling)))
+    );
+  },
+
+  isSelfClosing: function(node) {
+    return (!node.firstChild);
+  },
+
+  isValidText: function(node) {
+    if (!node) return false;
+    return (node.nodeType == 3 && !this.isEmptyString(node.nodeValue));
+  },
+
+  isSeparator: function(node) {
+    if (!node) return false;
+    return (node.nodeType == 1 && separators.indexOf(node.tagName.toLowerCase()) != -1);
+  },
+
+  hasChildNodes: function(node) {
+    if (!node.childNodes) return false;
+    return (node.childNodes.length > 0);
+  },
+
+  isBetweenSeparators: function(node) {
+    if (this.isSeparator(node.previousSibling) && !this.isValidText(node.nextSibling)){ return true; }
+    if (this.isSeparator(node.nextSibling) && !this.isValidText(node.previousSibling)){ return true; }
+    return false;
+  },
+
+  isOnlyChild: function(node) {
+    if (!node.parentNode) return false;
+    return (node.parentNode.childNodes.length == 1);
+  },  
+
+  matchesSelectors: function(node, selectors, children) {
+    var matcher, slctrs = typeof selectors === "string" ? [selectors] : selectors;
+    if(slctrs) {
+      for(var i=0,l=slctrs.length; i<l;i++) {
+        var slctr = slctrs[i] + ((children) ? ("," + slctrs[i] + " *") : "");
+        matcher = 
+          (node.matches       && node.matches(slctr)) ||
+          (node.webkitMatches && node.webkitMatches(slctr)) || 
+          (node.mozMatches    && node.mozMatches(slctr)) || 
+          (node.msMatches     && node.msMatches(slctr));
+        if(matcher) return true;
+      }
+    }
+    return false;    
+  },
+
+  nodeInfo: function(node) {
+    var info = [node.nodeType];
+
+    if (node.nodeType == 1)             { info.push(node.tagName); }
+    if (this.isInline(node))            { info.push("inline"); }
+    if (this.hasInlineSiblings(node))   { info.push("sentence"); }
+    if (!this.hasInlineSiblings(node))  { info.push("only translatable"); }
+    if (this.isSelfClosing(node))       { info.push("self closing"); }
+    if (this.isOnlyChild(node))         { info.push("only child"); }
+    if (this.nodeType == 3)             { info.push("value: " + node.nodeValue); }
+
+    return "[" + info.join(", ") + "]";
+  }
+
+};
+
+
+},{}],6:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -680,10 +772,74 @@ tml = tml.utils.extend(tml, {
 
     options.preferred_languages = options.preferred_languages || helpers.getBrowserLanguages();
 
-    if (tml.config.debug || options.info)
-      helpers.printWelcomeMessage(tml.version);
+    if(!options.current_source) {
+      options.current_source = function(){
+        return helpers.getCurrentSource({});
+      };
+    }
 
-    tml.initApplication(options, callback);
+    if (tml.config.debug || options.info){
+      helpers.printWelcomeMessage(tml.version);
+    }
+
+    tml.initApplication(options, function(){
+      tml.startKeyListener();
+      tml.startSourceListener(options);
+      tml.updateLanguageSelector();
+      if(callback) { callback(); }
+    });
+  },
+  
+  // submit any newly registered keys every 3 seconds
+  startKeyListener: function() {
+    if(tml.getApplication().isInlineModeEnabled()) {
+      var app   = tml.getApplication();
+      var freq  = 3000;
+      setInterval(function(){
+        app.submitMissingTranslationKeys();
+      }, freq);
+    }
+  },
+
+  refreshSource: function(options){
+    var self    = this;
+    var source  = helpers.getCurrentSource(options);
+    var app     = tml.getApplication();
+    var key     = tml.utils.generateKey(source); // utils
+    var locale  = app.current_locale; 
+
+    var updateSource = function(){
+      if (self.tokenizer){
+        self.tokenizer.updateAllNodes();
+      }
+    };
+
+    if(!app.getSource(source)) {
+      app.loadSources([source], locale, function(sources) {
+        if (sources.length > 0 && sources[0] && sources[0].sources && sources[0].sources.length > 0) {
+          app.loadSources(sources[0].sources, app.current_locale, updateSource);
+        } else {
+          updateSource();
+        }
+      });
+    }
+  },
+
+  //  keep track of route changes and update source
+  startSourceListener: function(options){   
+    var self = this;
+    var app = tml.getApplication();
+    
+    function setSource(method){
+      return function() {
+        if(method) { method.apply(history, arguments); }
+        self.refreshSource(options);
+      };
+    }
+
+    window.history.pushState     = setSource(window.history.pushState);
+    window.history.replaceState  = setSource(window.history.replaceState);
+    window.addEventListener('popstate', setSource());
   },
 
   /**
@@ -763,9 +919,9 @@ tml = tml.utils.extend(tml, {
           host:       options.agent.host,
           cache:      options.agent.cache || 864000000,
           domains:    options.agent.domains || {},
-          locale:     options.current_locale,
-          source:     options.current_source,
-          sdk:        'tml-js v' + tml.version,
+          locale:     tml.app.current_locale,
+          source:     tml.app.current_source,
+          sdk:        options.sdk || 'tml-js v' + tml.version,
           css:        tml.app.css,
           languages:  tml.app.languages
         }, function () {
@@ -814,13 +970,22 @@ tml = tml.utils.extend(tml, {
       helpers.updateCurrentLocale(tml.options.key, locale);
       tml.config.currentLanguage = tml.app.getCurrentLanguage();
 
-      if (this.tokenizer)
+      if (this.tokenizer){
         this.tokenizer.updateAllNodes();
+      }
 
-      if (tml.utils.isFunction(tml.options.onLanguageChange))
+      tml.updateLanguageSelector();
+
+      if (tml.utils.isFunction(tml.options.onLanguageChange)){
         tml.options.onLanguageChange(language);
+      }
     }.bind(this));
   },
+
+
+
+
+
 
   /**
    * Translates a string
@@ -845,7 +1010,7 @@ tml = tml.utils.extend(tml, {
       current_translator: tml.app.current_translator,
       block_options:      (tml.block_options || [])
     }, params.options);
-
+    
     return tml.app.getCurrentLanguage().translate(params);
   },
 
@@ -882,6 +1047,7 @@ tml = tml.utils.extend(tml, {
 
     if(/ded|te/.test(document.readyState)) {
       this.tokenizer.translateDOM(document.body);
+      this.translateNow();
     } else if (mutationObserver) {
       if(document.body) {
         this.tokenizer.translateDOM(document.body);
@@ -901,7 +1067,7 @@ tml = tml.utils.extend(tml, {
         mutations.forEach(function(mutation) {
           var target = mutation.target;
           var nodes = mutation.addedNodes || [];
-
+          
           if (nodes.length > 0) {
             for (var i = nodes.length - 1; i > -1; i--) {
               var node = nodes[i];
@@ -917,7 +1083,7 @@ tml = tml.utils.extend(tml, {
         });
 
         if(document.readyState == "interactive") {
-          observer.disconnect();
+          //observer.disconnect();
         }
       }  
     };
@@ -1103,42 +1269,13 @@ window.tml_end_block          = tml.endBlock;
 
 window.util = tml.utils; // TODO: is it being used?
 
-},{"./api_adapters/ajax":1,"./cache_adapters/browser":2,"./cache_adapters/inline":3,"./helpers":4,"./tokenizers/dom":6,"tml-js":30}],6:[function(require,module,exports){
-/**
- * Copyright (c) 2015 Translation Exchange, Inc.
- *
- *  _______                  _       _   _             ______          _
- * |__   __|                | |     | | (_)           |  ____|        | |
- *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
- *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
- *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
- *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
- *                                                                                        __/ |
- *                                                                                       |___/
- * Permission is hereby granted, free of charge, to any person obtaining
- * a copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
- * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
- * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
- * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
-
+},{"./api_adapters/ajax":1,"./cache_adapters/browser":2,"./cache_adapters/inline":3,"./helpers":4,"./tokenizers/dom":7,"tml-js":31}],7:[function(require,module,exports){
 var tml         = require('tml-js');
-
 var config      = tml.config;
 var utils       = tml.utils;
+
+var dom         = require('../helpers/dom-helpers');
+
 
 var DomTokenizer = function(doc, context, options) {
   this.doc = doc;
@@ -1149,22 +1286,31 @@ var DomTokenizer = function(doc, context, options) {
 
 DomTokenizer.prototype = {
 
-  content_cache:[],
-  content_nodes:[],
+  contentCache   :[],
+  contentNodes   :[],
+  translatedNodes :[],
+
+  getOption: function(name) {
+    if(typeof this.options[name] === 'undefined' || this.options[name] === null) {
+      return utils.hashValue(config.translator_options, name);
+    }
+    return this.options[name];
+  },  
 
   translate: function() {
     return this.translateTree(this.doc);
   },
 
   updateAllNodes: function(){
-    for(var i=0,l=this.content_cache.length;i<l;i++){
-      if(this.content_cache[i].container) {
-        this.content_cache[i].container.innerHTML = this.translateTml(this.content_cache[i].tml, this.content_cache[i].data);
+    for(var i=0,l=this.contentCache.length;i<l;i++){
+      if(this.contentCache[i].container) {
+        this.contentCache[i].container.innerHTML = this.translateTml(this.contentCache[i].tml, this.contentCache[i].data);
       }
     }
   },
 
   replaceNodes: function(nodes) {
+
     var ti = document.createElement("tml:inline");
     var parent = nodes[0] && nodes[0].parentNode;
     var container;
@@ -1174,16 +1320,14 @@ DomTokenizer.prototype = {
       data        = this.tokens;
       translation = this.translateTml(tml);
 
-      if(!translation || this.isEmptyString(tml) || this.isUntranslatableText(text) || this.isNoTranslate(parent)) return;
+      if(!translation || this.isEmptyString(tml) || this.isUntranslatableText(text) || !this.isTranslatable(parent)) return;
 
       if(nodes.length !== parent.childNodes.length) {
-        //setTimeout(function(){          
-          parent.insertBefore(ti, nodes[0]);
-          ti.innerHTML = translation;
-          ti.insertAdjacentHTML("beforebegin", "\n");
-          ti.insertAdjacentHTML("afterend", "\n");
-          nodes.forEach(function(n){parent.removeChild(n);});
-        //}.bind(this),0);
+        parent.insertBefore(ti, nodes[0]);
+        ti.innerHTML = translation;
+        ti.insertAdjacentHTML("beforebegin", "\n");
+        ti.insertAdjacentHTML("afterend", "\n");
+        nodes.forEach(function(n){parent.removeChild(n);});
         container = ti;
       } else {
         parent.insertBefore(ti, nodes[0]);
@@ -1194,43 +1338,32 @@ DomTokenizer.prototype = {
         container = parent;
       }
 
-      if(this.content_nodes.indexOf(container) == -1) {
-        this.content_cache.push({container: container, tml: tml, data: data});  
-        this.content_nodes.push(container);
+      if(this.contentNodes.indexOf(container) == -1) {
+        this.contentCache.push({container: container, tml: tml, data: data});  
+        this.contentNodes.push(container);
       }
       
     }
   },
 
-  isUntranslatableText: function(text) {
-    return (
-      this.isEmptyString(text) ||   // empty
-      text.match(/^[0-9,.\s]+$/)    // numbers
-    );
-  },
-
-  translatedNodes: [],
 
   translateDOM: function(node) {
     if(this.translatedNodes.indexOf(node) !== -1) return;
     this.translatedNodes.push(node);
 
-    if (node.nodeType == 3) {
-      node.nodeValue = node.nodeValue;
-      return;
-    }
+    if (node.nodeType == 3) { return; }
 
     var source = node.nodeType == 1 && this.getSourceBlock(node);
     if (source) {
       window.tml_begin_block({source: source});
     }
 
-    var l = node.childNodes.length, i = l, buffer  = [];
-    while(i--) {
-      var child = node.childNodes[l-i-1];
-      if(!child || this.isNoTranslate(child)) continue;
+    var buffer = [];
+    for(var i=0;i<node.childNodes.length;i++) {
+      var child = node.childNodes[i];
+      if(!child || !this.isTranslatable(child)) continue;
 
-      if (child.nodeType == 3 || this.isInlineNode(child) && this.hasInlineSiblings(child)) {
+      if (child.nodeType == 3 || dom.isInline(child) && dom.hasInlineSiblings(child)) {
         buffer.push(child);
       } else {
         this.replaceNodes(buffer);
@@ -1239,61 +1372,41 @@ DomTokenizer.prototype = {
       }
     }
 
-    if (buffer.length>0) this.replaceNodes(buffer);
+    if (buffer.length>0) {
+      if(buffer.length == 1 && buffer[0].nodeType == 1) {
+        this.translateDOM(buffer[0]);
+      } else {
+        this.replaceNodes(buffer);
+      }
+    }
 
     if(source) {
       window.tml_end_block();
     }
   },
-
-  matchesUntranslatableSelector: function(node){
-    var matcher, slctrs = this.getOption("ignore_elements") || [];
-    if(slctrs) {
-      for(var i=0,l=slctrs.length; i<l;i++) {
-        var slctr = slctrs[i] + "," + slctrs[i] + " *";
-        matcher = 
-          (node.matches       && node.matches(slctr)) ||
-          (node.webkitMatches && node.webkitMatches(slctr)) || 
-          (node.mozMatches    && node.mozMatches(slctr)) || 
-          (node.msMatches     && node.msMatches(slctr));
-        if(matcher) return true;
-      }
-    }
-    return false;
-  },
-
+  
   getSourceBlock: function(node) {
-    var matcher, els = config.sourceElements || [];
-    if (els) {
-      for(var i=0,l=els.length; i<l;i++) {
-        var slctr = els[i].selector;
-        var name = els[i].name;
-        matcher = 
-          (node.matches && node.matches(slctr)) || 
-          (node.webkitMatches && node.webkitMatches(slctr)) || 
-          (node.mozMatches    && node.mozMatches(slctr)) || 
-          (node.msMatches     && node.msMatches(slctr));
-        if(matcher) return name;
+    if(config.sourceElements) {
+      var match = dom.matchesSelectors(node, config.sourceElements);
+      if(match) {
+        return node.getAttribute('name') || node.getAttribute('id') || node.getAttribute('class');
       }
     }
     return node.getAttribute('data-tml-source') || false;
+    
   },
 
-  isNoTranslate: function(node) {
-    // Comments are not translatable
-    if (node.nodeType == 8)
-      return true;
-
-    // Elements
+  isTranslatable: function(node) {
+    if (node.nodeType == 8) { return false; }
+    if (node.nodeType == 3) { node = node.parentNode; }
     if (node.nodeType == 1) {
-      return (
-        (this.getOption("nodes.scripts").indexOf(node.tagName.toLowerCase()) != -1) ||
-        (node.hasAttribute('notranslate')) ||
-        (this.matchesUntranslatableSelector(node))
-      );
+      return !dom.matchesSelectors(node, ([]).concat(
+        (this.getOption("nodes.scripts") || []),
+        (this.getOption("ignore_elements") || []),
+        (['[notranslate]','.notranslate','tml\\:label'])
+      ), true);
     }
-
-    return false;
+    return true;
   },
 
   translateTml: function(tml, data) {
@@ -1325,32 +1438,12 @@ DomTokenizer.prototype = {
     return translation;
   },
 
-  isValidTml: function(tml) {
-    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}/gi;
-    return !this.isEmptyString(tml.replace(tokens, ''));
-  },
 
-  hasChildNodes: function(node) {
-    if (!node.childNodes) return false;
-    return (node.childNodes.length > 0);
-  },
-
-  isBetweenSeparators: function(node) {
-    if (this.isSeparatorNode(node.previousSibling) && !this.isValidTextNode(node.nextSibling))
-      return true;
-
-    if (this.isSeparatorNode(node.nextSibling) && !this.isValidTextNode(node.previousSibling))
-      return true;
-
-    return false;
-  },
 
   generateTmlTags: function(node) {
-    if(node.nodeType == 3) {
-      return node.nodeValue;
-    }
+    if(node.nodeType == 3) { return node.nodeValue; }
 
-    if (this.isNoTranslate(node)) {
+    if (!this.isTranslatable(node)) {
       var tokenName = this.contextualize(this.adjustName(node), node.innerHTML);
       return "{" + tokenName + "}";
     }
@@ -1364,10 +1457,7 @@ DomTokenizer.prototype = {
 
     for(var i=0; i<node.childNodes.length; i++) {
       var child = node.childNodes[i];
-      if (child.nodeType == 3)                    // text node
-        buffer = buffer + child.nodeValue;
-      else
-        buffer = buffer + this.generateTmlTags(child);
+      buffer = buffer + ((child.nodeType == 3) ? child.nodeValue : this.generateTmlTags(child));
     }
     var tokenContext = this.generateHtmlToken(node);
     var token = this.contextualize(this.adjustName(node), tokenContext);
@@ -1375,7 +1465,7 @@ DomTokenizer.prototype = {
 
     var value = this.sanitizeValue(buffer);
 
-    if (this.isSelfClosingNode(node)){
+    if (dom.isSelfClosing(node)){
       tml = '{' + token + '}';
     } else {
       tml = '<' + token + '>' + value + '</' + token + '>';
@@ -1412,22 +1502,6 @@ DomTokenizer.prototype = {
     return "{" + tokenName + "}";
   },
 
-  getOption: function(name) {
-    if(typeof this.options[name] === 'undefined' || this.options[name] === null) {
-      return utils.hashValue(config.translator_options, name);
-    }
-    return this.options[name];
-  },
-
-  debugTranslation: function(translation) {
-    return this.getOption("debug_format").replace('{$0}', translation);
-  },
-
-  isEmptyString: function(tml) {
-    tml = tml.replace(/[\s\n\r\t\0\x0b\xa0\xc2]/g, '');
-    return (tml === '');
-  },
-
   resetContext: function() {
     this.tokens = [].concat(this.context);
   },
@@ -1436,68 +1510,7 @@ DomTokenizer.prototype = {
     return (this.getOption("nodes.short").indexOf(token.toLowerCase()) != -1 || value.length < 20);
   },
 
-  isOnlyChild: function(node) {
-    if (!node.parentNode) return false;
-    return (node.parentNode.childNodes.length == 1);
-  },
-
-  hasInlineSiblings: function(node) {
-    return (
-      (node.parentNode && node.parentNode.childNodes.length > 1) &&
-      (node.previousSibling && (this.isInlineNode(node.previousSibling) || this.isValidTextNode(node.previousSibling))) ||
-      (node.nextSibling && (this.isInlineNode(node.nextSibling) || this.isValidTextNode(node.nextSibling)))
-    );
-  },
-
-  isInlineNode: function(node) {
-    return (
-    node.nodeType == 1 &&
-    this.getOption("nodes.inline").indexOf(node.tagName.toLowerCase()) != -1 &&
-    !this.isOnlyChild(node)
-    );
-  },
-
-  isContainerNode: function(node) {
-    return (node.nodeType == 1 && !this.isInlineNode(node));
-  },
-
-  isSelfClosingNode: function(node) {
-    return (!node.firstChild);
-  },
-
-  isIgnoredNode: function(node) {
-    if (node.nodeType != 1) return true;
-    return (this.getOption("nodes.ignored").indexOf(node.tagName.toLowerCase()) != -1);
-  },
-
-  isValidTextNode: function(node) {
-    if (!node) return false;
-    return (node.nodeType == 3 && !this.isEmptyString(node.nodeValue));
-  },
-
-  isSeparatorNode: function(node) {
-    if (!node) return false;
-    return (node.nodeType == 1 && this.getOption("nodes.splitters").indexOf(node.tagName.toLowerCase()) != -1);
-  },
-
-  sanitizeValue: function(value) {
-    return value.replace(/^\s+/,'');
-  },
-
-  replaceSpecialCharacters: function(text) {
-    if (!this.getOption("data_tokens.special.enabled")) return text;
-
-    var matches = text.match(this.getOption("data_tokens.special.regex"));
-    var self = this;
-    matches.forEach(function(match) {
-      token = match.substring(1, match.length - 2);
-      self.context[token] = match;
-      text = text.replace(match, "{" + token + "}");
-    });
-
-    return text;
-  },
-
+ 
   generateDataTokens: function(text) {
     var self = this;
 
@@ -1542,9 +1555,9 @@ DomTokenizer.prototype = {
         }
       });
     }
-
     return text;
   },
+
 
   generateHtmlToken: function(node, value) {
     var name = node.tagName.toLowerCase();
@@ -1553,11 +1566,12 @@ DomTokenizer.prototype = {
     value = (!value ? '{$0}' : value);
 
     if (attributes.length === 0) {
-      if (this.isSelfClosingNode(node)) {
-        if (name == "br" || name == "hr")
+      if (dom.isSelfClosing(node)) {
+        if (dom.isSeparator(node)){
           return '<' + name + '/>';
-        else
+        } else {
           return '<' + name + '>' + '</' + name + '>';
+        }
       }
       return '<' + name + '>' + value + '</' + name + '>';
     }
@@ -1576,11 +1590,12 @@ DomTokenizer.prototype = {
     });
     attr = attr.join(' ');
 
-    if (this.isSelfClosingNode(node))
+    if (dom.isSelfClosing(node)) {
       return '<' + name + ' ' + attr + '>' + '</' + name + '>';
-
+    }
     return '<' + name + ' ' + attr + '>' + value + '</' + name + '>';
   },
+
 
   adjustName: function(node) {
     var name = node.tagName.toLowerCase();
@@ -1588,6 +1603,7 @@ DomTokenizer.prototype = {
     name = map[name] ? map[name] : name;
     return name;
   },
+
 
   contextualize: function(name, context) {
     if (this.tokens[name] && this.tokens[name] != context) {
@@ -1605,6 +1621,36 @@ DomTokenizer.prototype = {
     return name;
   },
 
+
+
+  // String Helpers
+
+  isEmptyString: function(tml) {
+    tml = tml.replace(/[\s\n\r\t\0\x0b\xa0\xc2]/g, '');
+    return (tml === '');
+  },
+
+  isUntranslatableText: function(text) {
+    return (
+      this.isEmptyString(text) ||   // empty
+      text.match(/^[0-9,.\s]+$/)    // numbers
+    );
+  },
+
+  isValidTml: function(tml) {
+    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}/gi;
+    return !this.isEmptyString(tml.replace(tokens, ''));
+  },
+
+  sanitizeValue: function(value) {
+    return value.replace(/^\s+/,'');
+  },
+
+
+
+
+  // Debugging
+
   debug: function(doc) {
     this.doc = doc;
     this.debugTree(doc, 0);
@@ -1612,8 +1658,7 @@ DomTokenizer.prototype = {
 
   debugTree: function(node, depth) {
     var padding = new Array(depth+1).join('=');
-
-    console.log(padding + "=> " + (typeof node) + ": " + this.nodeInfo(node));
+    console.log(padding + "=> " + (typeof node) + ": " + dom.nodeInfo(node));
 
     if (node.childNodes) {
       var self = this;
@@ -1624,44 +1669,25 @@ DomTokenizer.prototype = {
     }
   },
 
-  nodeInfo: function(node) {
-    var info = [];
-    info.push(node.nodeType);
-
-    if (node.nodeType == 1)
-      info.push(node.tagName);
-
-    if (this.isInlineNode(node)) {
-      info.push("inline");
-      if (this.hasInlineSiblings(node))
-        info.push("sentence");
-      else
-        info.push("only translatable");
-    }
-
-    if (this.isSelfClosingNode(node))
-      info.push("self closing");
-
-    if (this.isOnlyChild(node))
-      info.push("only child");
-
-    if (node.nodeType == 3)
-      return "[" + info.join(", ") + "]" + ': "' + node.nodeValue + '"';
-
-    return "[" + info.join(", ") + "]";
+  debugTranslation: function(translation) {
+    return this.getOption("debug_format").replace('{$0}', translation);
   }
+
+
 
 };
 
 module.exports = DomTokenizer;
 
-},{"tml-js":30}],7:[function(require,module,exports){
+},{"../helpers/dom-helpers":5,"tml-js":31}],8:[function(require,module,exports){
+(function (global){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
+/* eslint-disable no-proto */
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
@@ -1701,20 +1727,22 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = (function () {
-  function Bar () {}
-  try {
-    var arr = new Uint8Array(1)
-    arr.foo = function () { return 42 }
-    arr.constructor = Bar
-    return arr.foo() === 42 && // typed array instances can be augmented
-        arr.constructor === Bar && // constructor can be set
-        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
-        arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
-  } catch (e) {
-    return false
-  }
-})()
+Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
+  ? global.TYPED_ARRAY_SUPPORT
+  : (function () {
+      function Bar () {}
+      try {
+        var arr = new Uint8Array(1)
+        arr.foo = function () { return 42 }
+        arr.constructor = Bar
+        return arr.foo() === 42 && // typed array instances can be augmented
+            arr.constructor === Bar && // constructor can be set
+            typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+            arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+      } catch (e) {
+        return false
+      }
+    })()
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -1870,10 +1898,16 @@ function fromJsonObject (that, object) {
   return that
 }
 
+if (Buffer.TYPED_ARRAY_SUPPORT) {
+  Buffer.prototype.__proto__ = Uint8Array.prototype
+  Buffer.__proto__ = Uint8Array
+}
+
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
+    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -3190,7 +3224,8 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-},{"base64-js":8,"ieee754":9,"is-array":10}],8:[function(require,module,exports){
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 ;(function (exports) {
@@ -3316,7 +3351,7 @@ var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 	exports.fromByteArray = uint8ToBase64
 }(typeof exports === 'undefined' ? (this.base64js = {}) : exports))
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = nBytes * 8 - mLen - 1
@@ -3402,7 +3437,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 
 /**
  * isArray
@@ -3437,7 +3472,7 @@ module.exports = isArray || function (val) {
   return !! val && '[object Array]' == str.call(val);
 };
 
-},{}],11:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 module.exports = {
 
   enabled: true,
@@ -3602,7 +3637,7 @@ module.exports = {
   }
 
 };
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -3672,7 +3707,7 @@ Base.prototype = {
 };
 
 module.exports = Base;
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -3930,7 +3965,7 @@ ApiClient.prototype = {
 
 module.exports = ApiClient;
 
-},{"./api_adapters/base":12,"./configuration":17,"./logger":25,"./utils":40}],14:[function(require,module,exports){
+},{"./api_adapters/base":13,"./configuration":18,"./logger":26,"./utils":41}],15:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -4099,6 +4134,10 @@ Application.prototype = {
    */
   getSource: function(key) {
     return this.sources_by_key[key];
+  },
+
+  removeSource: function(key) {
+    delete this.sources_by_key[key];
   },
 
   /**
@@ -4319,6 +4358,10 @@ Application.prototype = {
     return locale + "/sources/" + source;
   },
 
+  getSourceName: function(source) {
+    return source.call && source() || source;
+  },  
+
   /**
    * Loads sources
    *
@@ -4331,6 +4374,7 @@ Application.prototype = {
     var self = this;
 
     sources.forEach(function(source) {
+      source = self.getSourceName(source);
       if (!self.sources_by_key[source]) {
         data[source] = function(callback) {
 
@@ -4398,7 +4442,7 @@ Application.prototype = {
   },
 
   registerMissingTranslationKey: function(source_key, translation_key) {
-    //logger.debug("Registering missing translation key: " + source_key + " " + translation_key.label);
+    //console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
 
     this.addMissingElement(source_key, translation_key);
 
@@ -4470,8 +4514,8 @@ Application.prototype = {
           source_key.forEach(function (source) {
             // console.log("Removing " + locale + '/sources/' + source + " from cache");
             // TODO: may not need to remove all sources in path from the cache
-            config.getCache().del(locale + '/sources/' + source, function () {
-            });
+            self.removeSource(source);
+            config.getCache().del(locale + '/sources/' + source, function () {});
           });
         });
       });
@@ -4527,7 +4571,7 @@ Application.prototype = {
 
 module.exports = Application;
 
-},{"./api_client":13,"./configuration":17,"./language":20,"./logger":25,"./source":29,"./utils":40}],15:[function(require,module,exports){
+},{"./api_client":14,"./configuration":18,"./language":21,"./logger":26,"./source":30,"./utils":41}],16:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -4716,7 +4760,7 @@ Cache.prototype = {
 };
 
 module.exports = Cache;
-},{"./cache_adapters/base":16,"./configuration":17,"./utils":40}],16:[function(require,module,exports){
+},{"./cache_adapters/base":17,"./configuration":18,"./utils":41}],17:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -4885,7 +4929,7 @@ Base.prototype = {
 };
 
 module.exports = Base;
-},{"../configuration":17,"../logger":25,"../utils":40}],17:[function(require,module,exports){
+},{"../configuration":18,"../logger":26,"../utils":41}],18:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -5117,7 +5161,7 @@ module.exports = new Configuration();
 
 
 
-},{"./../config/config.js":11,"./cache":15,"./utils":40}],18:[function(require,module,exports){
+},{"./../config/config.js":12,"./cache":16,"./utils":41}],19:[function(require,module,exports){
 (function (Buffer){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
@@ -5291,7 +5335,7 @@ module.exports = HTMLDecorator;
 
 
 }).call(this,require("buffer").Buffer)
-},{"../utils":40,"buffer":7}],19:[function(require,module,exports){
+},{"../utils":41,"buffer":8}],20:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -5325,48 +5369,145 @@ module.exports = HTMLDecorator;
 
 var scripts = {
 
-  agent_tag: function (app, options) {
+  header: function (app, options) {
     options = options || {};
-
-    options.cache = options.cache || 864000000;
-    var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
-
-    if (options.cache) {
-      var t = new Date().getTime();
-      t = t - (t % options.cache);
-      agent_host += "?ts=" + t;
-    }
-
-    options.css = options.css || app.css;
-    options.sdk = options.sdk || 'tml-js v0.4.16';
-    options.languages = [];
-
-    for (var l = 0; l < app.languages.length; l++) {
-      var language = app.languages[l];
-      options.languages.push({
-        locale: language.locale,
-        english_name: language.english_name,
-        native_name: language.native_name,
-        flag_url: language.flag_url
-      });
-    }
-
-    console.log(options);
 
     var html = [];
     html.push("<script>");
-    html.push("(function() {");
-    html.push("  var script = document.createElement('script');");
-    html.push("  script.setAttribute('id', 'tml-agent'); script.setAttribute('type', 'application/javascript');");
-    html.push("  script.setAttribute('src', '" + agent_host + "');");
+
+    html.push("function tml_add_script(doc, id, src, onload) {");
+    html.push("  var script = doc.createElement('script');");
+    html.push("  script.setAttribute('id', id); script.setAttribute('type', 'application/javascript');");
+    html.push("  script.setAttribute('src', src);");
     html.push("  script.setAttribute('charset', 'UTF-8');");
-    html.push("  script.onload = function() {");
-    html.push("       Trex.init('" + app.key + "', " + JSON.stringify(options) + ");");
-    html.push("  };");
-    html.push("  document.getElementsByTagName('head')[0].appendChild(script);");
-    html.push("})();");
+    html.push("  if (onload) script.onload = onload;");
+    html.push("  doc.getElementsByTagName('head')[0].appendChild(script);");
+    html.push("  return script;");
+    html.push("}");
+
+    //console.log(options.agent);
+
+    if (!options.agent) {
+      options.agent = {
+        type: 'agent',
+        cache: 864000000
+      };
+    }
+
+    if (options.agent.type == "agent") {
+
+      var agent_host = options.agent.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
+
+      if (options.agent.cache) {
+        var t = new Date().getTime();
+        t = t - (t % options.agent.cache);
+        agent_host += "?ts=" + t;
+      }
+
+      options.agent.css = app.css;
+      //options.agent.sdk = 'tml-js v' + Tml.version;
+      options.agent.languages = [];
+
+      for (var l = 0; l < app.languages.length; l++) {
+        var language = app.languages[l];
+        options.agent.languages.push({
+          locale: language.locale,
+          english_name: language.english_name,
+          native_name: language.native_name,
+          flag_url: language.flag_url
+        });
+      }
+
+      html.push("(function() {");
+      html.push("   tml_add_script(window.document, 'tml-agent', '" + agent_host + "', function() {");
+      html.push("       Trex.init('" + app.key + "', " + JSON.stringify(options.agent) + ");");
+      html.push("   });");
+      html.push("})();");
+
+    } else {
+
+      html.push("function tml_add_css(doc, value, inline) {");
+      html.push("  var css = null;");
+      html.push("  if (inline) {");
+      html.push("    css = doc.createElement('style'); css.type = 'text/css';");
+      html.push("    if (css.styleSheet) css.styleSheet.cssText = value;");
+      html.push("    else css.appendChild(document.createTextNode(value));");
+      html.push("  } else {");
+      html.push("    css = doc.createElement('link'); css.setAttribute('type', 'text/css');");
+      html.push("    css.setAttribute('rel', 'stylesheet'); css.setAttribute('media', 'screen');");
+      html.push("    css.setAttribute('href', value);");
+      html.push("  }");
+      html.push("  doc.getElementsByTagName('head')[0].appendChild(css);");
+      html.push("  return css;");
+      html.push("}");
+
+      html.push("(function() {");
+      html.push("  if (window.addEventListener) window.addEventListener('load', tml_init, false);");
+      html.push("  else if (window.attachEvent) window.attachEvent('onload', tml_init);");
+      html.push("  window.setTimeout(function() {tml_init();}, 1000);");
+      html.push("  function tml_init() {");
+      html.push("    if (window.tml_already_initialized) return;");
+      html.push("    window.tml_already_initialized = true;");
+      html.push("    tml_add_css(window.document, '" + app.tools.stylesheet + "', false);");
+      html.push("    tml_add_css(window.document, \"" + app.css + "\", true);");
+      html.push("    tml_add_script(window.document, 'tml-jssdk', '" + app.tools.javascript + "', function() {");
+      html.push("      Tml.app_key = '" + app.key + "';");
+      html.push("      Tml.host = '" + app.tools.host + "';");
+      html.push("      Tml.current_source = '" + app.current_source + "';");
+      html.push("      Tml.default_locale = '" + app.default_locale + "';");
+      html.push("      Tml.page_locale = '" + options.current_language.locale + "';");
+      html.push("      Tml.locale = '" + options.current_language.locale + "';");
+
+      if (app.isFeatureEnabled("shortcuts")) {
+        var keys = Object.keys(app.shortcuts || {});
+        for (var s = 0; s < keys.length; s++) {
+          html.push("shortcut.add('" + keys[s] + "', function() {");
+          html.push(app.shortcuts[keys[s]]);
+          html.push("});");
+        }
+      }
+
+      html.push("      if (typeof(tml_on_ready) === 'function') tml_on_ready();");
+      html.push("      if (typeof(tml_footer_scripts) === 'function') tml_footer_scripts();");
+      html.push("    })");
+      html.push("  }");
+      html.push("})();");
+    }
     html.push("</script>");
     return html.join("\n");
+  },
+
+  language_selector_script_tag: function () {
+    var html = [];
+    html.push("<script>");
+    html.push("function tml_change_locale(locale) {");
+    html.push("  var query_parts = window.location.href.split('#');");
+    html.push("  var anchor = query_parts.length > 1 ? query_parts[1] : null;");
+    html.push("  query_parts = query_parts[0].split('?');");
+    html.push("  var query = query_parts.length > 1 ? query_parts[1] : null;");
+    html.push("  var params = {};");
+    html.push("  if (query) {");
+    html.push("    var vars = query.split('&');");
+    html.push("    for (var i = 0; i < vars.length; i++) {");
+    html.push("      var pair = vars[i].split('=');");
+    html.push("      params[pair[0]] = pair[1];");
+    html.push("    }");
+    html.push("  }");
+    html.push("  params['locale'] = locale;");
+    html.push("  query = [];");
+    html.push("  var keys = Object.keys(params);");
+    html.push("  for (i = 0; i < keys.length; i++) {");
+    html.push("    query.push(keys[i] + '=' + params[keys[i]]);");
+    html.push("  }");
+    html.push("  var destination = query_parts[0];");
+    html.push("  if (query.length > 0)");
+    html.push("    destination = destination + '?' + query.join('&');");
+    html.push("  if (anchor)");
+    html.push("    destination = destination + '#' + anchor;");
+    html.push("  window.location = destination;");
+    html.push("}");
+    html.push("</script>");
+    return html.join('');
   },
 
   language_name_tag: function (language, options) {
@@ -5391,28 +5532,453 @@ var scripts = {
     return "<img src='" + language.flag_url + "' style='margin-right:3px;' alt='" + name + "' title='" + name + "'>";
   },
 
-  language_selector_tag: function (app, type, options) {
+  language_selector_toggle_method: function() {
+    return "Tml.Utils.toggleInlineTranslations()";
+  },
+
+  language_selector_bootstrap: function (app, options) {
+    options = options || {};
+
+    var element = options.element || 'div';
+    var class_name = options.class_name || 'dropdown';
+    var style = options.style || '';
+    var name = options.language || 'english';
+    var toggle = (options.toggle === false ? false : true);
+    var toggle_label = options.toggle_label || 'Help Us Translate';
+    var toggle_label_cancel = options.toggle_label_cancel || 'Disable translation mode';
+    var powered_by = (options.powered_by === false ? false : true);
+
+    var html = [];
+
+    if (!options.client_side)
+      html.push(this.language_selector_script_tag());
+
+    if (element != 'none') {
+      html.push("<" + element + " class='" + class_name + "' style='" + style + "'>");
+    }
+
+    html.push("  <a href='#' role='button' class='" + class_name + "-toggle' data-toggle='" + class_name + "'>");
+
+    html.push(scripts.language_name_tag(options.current_language, {flag: true, name: name}));
+
+    html.push("</a>");
+
+    html.push("<ul class='" + class_name + "-menu' role='menu'>");
+
+    app.languages.forEach(function (lang) {
+      html.push("<li role='presentation'>");
+
+      if (options.current_language.locale == lang.locale) {
+        html.push("<div style='right: 5px;font-weight: bold;font-size: 16px;margin: 0px 5px 0px 0px;color: #13CF80;position: absolute;'>✓</div>");
+      }
+
+      if (options.client_side) {
+        html.push("<a href='javascript:void(0);' onclick='tml.changeLanguage(\"" + lang.locale + "\")'>");
+      } else {
+        html.push("<a href='javascript:void(0);' onclick='tml_change_locale(\"" + lang.locale + "\")'>");
+      }
+      html.push(scripts.language_name_tag(lang, {flag: true, name: name}));
+      html.push("</a></li>");
+    });
+
+    if (toggle) {
+      html.push("<li role='presentation' class='divider'></li>");
+      html.push("<li role='presentation'><a href='javascript:void(0);' onclick='" + this.language_selector_toggle_method() + "'>");
+      if (app.isInlineModeEnabled()) {
+        html.push(toggle_label_cancel);
+      } else {
+        html.push(toggle_label);
+      }
+      html.push("</a>");
+      html.push("</li>");
+    }
+
+    if (powered_by) {
+      html.push("<li role='presentation' class='divider'></li>");
+
+      html.push("<div style='padding: 0px 20px; font-size:11px; white-space: nowrap;'>");
+      html.push("<a href='http://translationexchange.com' style='color:#888;'>");
+      html.push("Powered By Translation Exchange");
+      html.push("</a>");
+      html.push("</div>");
+      html.push("</ul>");
+    }
+
+    if (element != 'none') {
+      html.push("</" + element + ">");
+    }
+
+    return html.join('');
+  },
+
+  language_selector_default: function (app, options) {
+    options = options || {};
+    var html = [];
+    html.push("<a href='#' onclick='Tml.UI.LanguageSelector.show();'>");
+    html.push("<img src='" + options.current_language.flag_url + "'> &nbsp;");
+    html.push(options.current_language.english_name);
+    html.push("</a>");
+    return html.join('');
+  },
+
+  language_selector_popup: function (app, options) {
+    options = options || {};
+    var element = options.element || 'div';
+    var class_name = options.class_name || 'dropdown';
+    var toggle = (options.toggle === false ? false : true);
+    var toggle_label = options.toggle_label || 'Help Us Translate';
+    var toggle_label_cancel = options.toggle_label_cancel || 'Disable translation mode';
+    var powered_by = (options.powered_by === false ? false : true);
+    var name = (options.name || 'english');
+    var html = [];
+
+    html.push("<style>");
+    html.push(".trex-language-selector {position: relative;display: inline-block;vertical-align: middle;}");
+    html.push(".trex-language-toggle,");
+    html.push(".trex-language-toggle:hover,");
+    html.push(".trex-language-toggle:focus {cursor:pointer;text-decoration:none;outline:none;}");
+    html.push(".trex-dropup .trex-dropdown-menu {top: auto;bottom: 100%;margin-bottom: 1px;-webkit-transform: scale(0.8) translateY(10%);transform: scale(0.8) translateY(10%);}");
+    html.push(".trex-dropleft .trex-dropdown-menu {left: auto; right: 0;}");
+    html.push(".trex-dropdown-menu {");
+    html.push("   -webkit-transform: scale(0.8) translateY(10%);transform: scale(0.8) translateY(10%);transition: 0.13s cubic-bezier(0.3, 0, 0, 1.3);opacity: 0;pointer-events: none;");
+    html.push("   display: block;font-family:Arial, sans-serif;position: absolute;");
+    html.push("   top: 100%;left: 0;z-index: 1000;float: left;list-style: none;background-color: #FFF;height:0px;width:0px;padding:0;overflow:hidden;");
+    html.push("}");
+    html.push(".trex-language-selector[dir=rtl] .trex-dropdown-menu {left: auto; right: 0;}");
+    html.push(".trex-language-selector.trex-dropleft[dir=rtl] .trex-dropdown-menu {left:0; right:auto;}");
+    html.push(".trex-language-selector.trex-open .trex-dropdown-menu {");
+    html.push("   opacity: 1;height:auto;width:auto;overflow:hidden;min-width: 250px;margin: 2px 0 0;font-size: 13px;");
+    html.push("   background-clip: padding-box;border: 1px solid rgba(0, 0, 0, 0.15);box-shadow: 0 2px 0 rgba(0, 0, 0, 0.05);");
+    html.push("   border-radius: 4px;color: #6D7C88;text-align: left;padding: 5px 0;");
+    html.push("   display:block;pointer-events: auto;-webkit-transform: none;transform: none;");
+    html.push("}");
+    html.push(".trex-dropdown-menu > li {");
+    html.push("text-align:" + options.current_language.align('left') + ";");
+    html.push("}");
+    html.push(".trex-dropdown-menu > li > a {");
+    html.push("  display: block; text-decoration:none !important; padding: 3px 10px;margin:0 5px;clear: both;font-weight: normal;line-height: 1.42857143;color: #333;border-radius:3px;white-space: nowrap;cursor:pointer;");
+    html.push("}");
+    html.push(".trex-dropdown-menu > li > a .trex-flag {margin-right:3px;width:23px;}");
+    html.push(".trex-dropdown-menu > li.trex-language-item > a:hover,");
+    html.push(".trex-dropdown-menu > li.trex-language-item > a:focus {text-decoration:none !important;background: #F0F2F4;}");
+    html.push(".trex-dropdown-menu > li.trex-language-item > a .trex-native-name {font-size: 11px;color: #A9AFB8;margin-left: 3px;}");
+    html.push(".trex-dropdown-menu > li.trex-selected a:after {content: '✓';right: 5px;font-weight: bold;font-size: 16px;margin: 0px 5px 0px 0px;color: #13CF80;position: absolute;}");
+    html.push(".trex-dropdown-menu[dir=rtl] > li.trex-selected a:after {left: 5px; right:auto !important; margin: 0px 0 0px 5px;}");
+    html.push(".trex-dropdown-menu .trex-credit a {border-top: solid 1px #DDD;font-size: 13px;padding: 7px 0 0;margin: 5px 15px 5px;color: #9FA7AE;font-weight: 400;}");
+    html.push("</style>");
+
+    if (options.element == 'self') {
+      options.container.className += ' trex-language-selector';
+      options.container.dir = options.current_language.direction();
+    } else {
+      html.push("<" + options.element + " class='trex-language-selector' dir='" + options.current_language.direction() + "'>");
+    }
+    html.push("<a class='trex-language-toggle' data-toggle='tml-language-selector' tabindex='0' dir='" + options.current_language.direction() + "'>");
+    html.push(scripts.language_name_tag(options.current_language, {flag: true, name: name}));
+    html.push("</a>");
+
+    html.push("<ul class='trex-dropdown-menu' dir='" + options.current_language.direction() + "'>");
+
+    app.languages.forEach(function (lang) {
+      html.push("<li class='trex-language-item " + (options.current_language.locale == lang.locale ? "trex-selected" : '') + "' dir='" + options.current_language.direction() + "'>");
+
+      if (options.client_side) {
+        html.push("<a href='javascript:void(0);' onclick='tml.changeLanguage(\"" + lang.locale + "\")'>");
+      } else {
+        html.push("<a href='javascript:void(0);' onclick='tml_change_locale(\"" + lang.locale + "\")'>");
+      }
+      html.push(scripts.language_name_tag(lang, {flag: true, name: name}));
+      html.push("</a></li>");
+    });
+
+    if (toggle) {
+      html.push("<li class='trex-credit' dir='" + options.current_language.direction() + "'>");
+      html.push("<a href='javascript:void(0);' onclick='" + this.language_selector_toggle_method() + "'>");
+      if (app.isInlineModeEnabled()) {
+        html.push(toggle_label_cancel);
+      } else {
+        html.push(toggle_label);
+      }
+      html.push("</a>");
+      html.push("</li>");
+    }
+
+    if (powered_by) {
+      html.push("<li class='trex-credit' dir='" + options.current_language.direction() + "'>");
+      html.push("<a href='http://translationexchange.com'>");
+      html.push("Powered by Translation Exchange");
+      html.push("</a>");
+      html.push("</li>");
+    }
+
+    html.push("</ul>");
+
+    if (options.element != 'self') {
+      html.push("</" + options.element + ">");
+    }
+
+    if (!options.client_side) {
+      html.push(scripts.language_selector_script_tag());
+      html.push("<script>");
+      var f = scripts.language_selector_popup_script.toString();
+      f = f.substring(f.indexOf("// begin") + 8 , f.indexOf("// end"));
+      html.push(f);
+      html.push("</script>");
+    }
+
+    return html.join('\n');
+  },
+
+  language_selector_popup_script: function() {
+    // begin
+    (function () {
+      'use strict';
+
+      function addEvent(evnt, elem, func) {
+        if (elem.addEventListener) elem.addEventListener(evnt, func, false);
+        else if (elem.attachEvent) elem.attachEvent('on' + evnt, func);
+        else elem[evnt] = func;
+      }
+
+      function hasClass(elem, cls) {
+        return elem.className.match(new RegExp('(\\s|^)' + cls + '(\\s|$)'));
+      }
+
+      function addClass(elem, cls) {
+        if (!hasClass(elem, cls)) elem.className += ' ' + cls;
+      }
+
+      function removeClass(elem, cls) {
+        if (hasClass(elem, cls)) {
+          var reg = new RegExp('(\\s|^)' + cls + '(\\s|$)');
+          elem.className = elem.className.replace(reg, ' ');
+        }
+      }
+
+      function toggleClass(elem, cls) {
+        if (!hasClass(elem, cls)) addClass(elem, cls);
+        else removeClass(elem, cls);
+      }
+
+      var LanguageSelector = function (element) {
+        this.element = element;
+        this.element.setAttribute('tabindex', '0');
+        addEvent('click', this.element, this.open.bind(this));
+        addEvent('blur', this.element, this.close.bind(this));
+      };
+
+      LanguageSelector.VERSION = '0.1.0';
+      LanguageSelector.prototype = {
+        adjustMenu: function (parent) {
+          removeClass(parent, 'trex-dropup');
+          removeClass(parent, 'trex-dropleft');
+          var
+            menu = parent.querySelectorAll('.trex-dropdown-menu')[0],
+            bounds = menu.getBoundingClientRect(),
+            vHeight = Math.max(document.documentElement.clientHeight, window.innerHeight || 0),
+            vWidth = Math.max(document.documentElement.clientWidth, window.innerWidth || 0),
+            buffer = 10;
+          if (bounds.top + menu.offsetHeight + buffer > vHeight) addClass(parent, 'trex-dropup');
+          if (bounds.left + menu.offsetWidth + buffer > vWidth)  addClass(parent, 'trex-dropleft');
+        },
+        open: function (e) {
+          e = e || window.event;
+          e.stopPropagation();
+          e.preventDefault();
+          var target = e.currentTarget || e.srcElement;
+          if (hasClass(target.parentElement, 'trex-open')) {
+            return this.close(e);
+          }
+          addClass(target.parentElement, 'trex-open');
+          this.adjustMenu(target.parentElement);
+          return false;
+        },
+        close: function (e) {
+          e = e || window.event;
+          var target = e.currentTarget || e.srcElement;
+          setTimeout(function () {
+            removeClass(target.parentElement, 'trex-open');
+          }, 500);
+        }
+      };
+      var selectorList = document.querySelectorAll('[data-toggle=tml-language-selector]');
+      for (var i = 0, el, l = selectorList.length; i < l; i++) {
+        el = selectorList[i];
+        el.languageSelector = new LanguageSelector(el);
+      }
+    })();
+    // end
+  },
+
+  language_selector_init: function(app, type, options) {
+    type = type || 'default';
+    if (type == 'popup') {
+      scripts.language_selector_popup_script();
+    }
+  },
+
+  language_selector_footer: function(app, options) {
+    options = options || {};
+    var toggle = (options.toggle === false ? false : true);
+    var toggle_label = options.toggle_label || 'Help Us Translate';
+    var toggle_label_cancel = options.toggle_label_cancel || 'Disable translation mode';
+    var powered_by = (options.powered_by === false ? false : true);
+
+    var html = [];
+
+    if (toggle) {
+      html.push("<div style='margin-top: 5px;' dir='" + options.current_language.direction() + "'>");
+      html.push("<a href='javascript:void(0);' onclick='" + this.language_selector_toggle_method() + "'>");
+      if (app.isInlineModeEnabled()) {
+        html.push(toggle_label_cancel);
+      } else {
+        html.push(toggle_label);
+      }
+      html.push("</a>");
+      html.push("</div>");
+    }
+
+    if (powered_by) {
+      html.push("<div style='margin-top: 5px;' dir='ltr'>");
+      html.push("<a href='http://translationexchange.com' style='font-size:12px;color: #ccc;'>");
+      html.push("Powered by Translation Exchange");
+      html.push("</a>");
+      html.push("</div>");
+    }
+
+    return html.join('');
+  },
+
+  language_selector_dropdown: function(app, options) {
+    options = options || {};
+    options.style = options.style || "";
+    options.class_name = options.class_name || "";
+    options.name = options.name || "english";
+
+    var html = [];
+
+    if (!options.client_side)
+      html.push(this.language_selector_script_tag());
+
+    var language_method = "tml_change_locale(this.options[this.selectedIndex].value)";
+    if (options.client_side) {
+      language_method = "tml.changeLanguage(this.options[this.selectedIndex].value)";
+    }
+
+    html.push("<select id='tml_language_selector' onchange='" + language_method + "' style='" + options.style + "' class='" + options.class_name + "'>");
+    app.languages.forEach(function (lang) {
+      html.push("<option dir='ltr' value='" + lang.locale + "' " + (options.current_language.locale == lang.locale ? 'selected' : '')  + ">");
+      if (options.name == 'english')
+        html.push(lang.english_name);
+      else
+        html.push(lang.native_name);
+      html.push("</option>");
+    });
+    html.push("</select>");
+
+    html.push(this.language_selector_footer(app, options));
+    return html.join('');
+  },
+
+  language_selector_flags: function(app, options) {
+    options = options || {};
+    options.style = options.style || "";
+    options.class_name = options.class_name || "";
+    options.name = options.name || "english";
+
+    var self = this;
+    var html = [];
+
+    if (!options.client_side)
+      html.push(this.language_selector_script_tag());
+
+    html.push("<div id='tml_language_selector'  style='" + options.style + "' class='" + options.class_name + "'>");
+    app.languages.forEach(function (lang) {
+      if (options.client_side)
+        html.push("<a href='#' onclick=\"tml.changeLanguage('" + lang.locale + "')\">");
+      else
+        html.push("<a href='#' onclick=\"tml_change_locale('" + lang.locale + "')\">");
+
+      html.push(self.language_flag_tag(lang, options));
+      html.push("</a> ");
+    });
+
+    html.push(this.language_selector_footer(app, options));
+    html.push("</div>");
+    return html.join('');
+  },
+
+  language_selector_list: function(app, options) {
+    options = options || {};
+    options.style = options.style || "";
+    options.class_name = options.class_name || "";
+    options.name = options.name || "english";
+    options.flag = true;
+
+    var self = this;
+    var html = [];
+
+    if (!options.client_side)
+      html.push(this.language_selector_script_tag());
+
+    html.push("<div id='tml_language_selector'  style='" + options.style + "' class='" + options.class_name + "'>");
+    app.languages.forEach(function (lang) {
+      html.push("<div>");
+
+      if (options.current_language.locale == lang.locale) {
+        html.push("<div style='float:right; font-weight: bold;font-size: 16px;'>✓</div>");
+        html.push("<strong>");
+      }
+
+      if (options.client_side)
+        html.push("<a href='#' onclick=\"tml.changeLanguage('" + lang.locale + "')\">");
+      else
+        html.push("<a href='#' onclick=\"tml_change_locale('" + lang.locale + "')\">");
+
+      html.push(self.language_name_tag(lang, options));
+      html.push("</a>");
+
+      if (options.current_language.locale == lang.locale) {
+        html.push("</strong>");
+      }
+
+      html.push("</div>");
+    });
+
+    html.push(this.language_selector_footer(app, options));
+    html.push("</div>");
+    return html.join('');
+  },
+
+  language_selector: function (app, type, options) {
     type = type || 'default';
 
-    var attrs = [];
-    var keys = Object.keys(options);
-    for (var i=1; i<keys.length; i++) {
-      attrs.push("data-tml-" + keys[i] + "='" + options[keys[i]] + "'")
+    if (type == 'default') {
+      return scripts.language_selector_default(app, options);
+    } else if (type == 'bootstrap') {
+      return scripts.language_selector_bootstrap(app, options);
+    } else if (type == 'popup') {
+      return scripts.language_selector_popup(app, options);
+    } else if (type == 'dropdown') {
+      return scripts.language_selector_dropdown(app, options);
+    } else if (type == 'flags') {
+      return scripts.language_selector_flags(app, options);
+    } else if (type == 'list') {
+      return scripts.language_selector_list(app, options);
     }
-    attrs = attrs.join(' ');
 
-    return "<div data-tml-language-selector='" + type + "' " + attrs + "></div>";
+    return "";
   }
 };
 
 module.exports = {
-  header: scripts.agent_tag, // deprecated
-  agent_tag: scripts.agent_tag,
+  header: scripts.header,
   language_name_tag: scripts.language_name_tag,
   language_flag_tag: scripts.language_flag_tag,
-  language_selector: scripts.language_selector_tag
+  language_selector: scripts.language_selector,
+  language_selector_init: scripts.language_selector_init
 };
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -5516,7 +6082,6 @@ Language.prototype = {
         this.application.verifySourcePath(current_source, source_path);
 
       var source = this.application.getSource(current_source);
-
       if (source && source.isIgnoredKey(translation_key.key)) {
         params.options.ignored = true;
         return translation_key.translate(this, params.tokens, params.options);
@@ -5532,6 +6097,8 @@ Language.prototype = {
         var local_key = this.application.getTranslationKey(translation_key.key);
         if (local_key) translation_key = local_key;
       }
+
+
     }
 
     return translation_key.translate(this, params.tokens, params.options);
@@ -5551,19 +6118,27 @@ Language.prototype = {
     return this.isRightToLeft() ? 'rtl' : 'ltr';
   },
 
+  getSourceName: function(source) {
+    return source.call && source() || source;
+  },
+
   getSourcePath: function(options) {
-    if (!options.block_options)
-      return [options.current_source];
+
+    if (!options.block_options.length){
+      return [this.getSourceName(options.current_source)];
+    }
 
     var source_path = [];
 
     for(var i=0; i<options.block_options.length; i++) {
       var opts = options.block_options[i];
-      if (opts.source) source_path.push(opts.source);
+      if (opts.source) {
+        source_path.push(this.getSourceName(opts.source));
+      }
     }
 
     source_path = source_path.reverse();
-    source_path.unshift(options.current_source);
+    source_path.unshift(this.getSourceName(options.current_source));
 
     return source_path;
   }
@@ -5571,7 +6146,7 @@ Language.prototype = {
 
 module.exports = Language;
 
-},{"./configuration":17,"./language_case":21,"./language_context":23,"./translation_key":38,"./utils":40}],21:[function(require,module,exports){
+},{"./configuration":18,"./language_case":22,"./language_context":24,"./translation_key":39,"./utils":41}],22:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -5688,7 +6263,7 @@ LanguageCase.prototype = {
 module.exports = LanguageCase;
 
 
-},{"./configuration":17,"./decorators/html":18,"./language_case_rule":22,"./utils":40}],22:[function(require,module,exports){
+},{"./configuration":18,"./decorators/html":19,"./language_case_rule":23,"./utils":41}],23:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -5787,7 +6362,7 @@ LanguageCaseRule.prototype = {
 
 module.exports = LanguageCaseRule;
 
-},{"./rules_engine/evaluator":27,"./rules_engine/parser":28,"./utils":40}],23:[function(require,module,exports){
+},{"./rules_engine/evaluator":28,"./rules_engine/parser":29,"./utils":41}],24:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -5906,7 +6481,7 @@ LanguageContext.prototype = {
 };
 
 module.exports = LanguageContext;
-},{"./configuration":17,"./language_context_rule":24,"./utils":40}],24:[function(require,module,exports){
+},{"./configuration":18,"./language_context_rule":25,"./utils":41}],25:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -5977,7 +6552,7 @@ LanguageContextRule.prototype = {
 };
 
 module.exports = LanguageContextRule;
-},{"./rules_engine/evaluator":27,"./rules_engine/parser":28,"./utils":40}],25:[function(require,module,exports){
+},{"./rules_engine/evaluator":28,"./rules_engine/parser":29,"./utils":41}],26:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6043,7 +6618,7 @@ var Logger = {
 };
 
 module.exports = Logger;
-},{"./configuration":17,"./utils":40}],26:[function(require,module,exports){
+},{"./configuration":18,"./utils":41}],27:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6286,7 +6861,7 @@ var MD5 = function (string) {
 };
 
 module.exports = MD5;
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6477,7 +7052,7 @@ Evaluator.prototype = {
 
 module.exports = Evaluator;
 
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6537,7 +7112,7 @@ Parser.prototype = {
 };
 
 module.exports = Parser;
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6633,7 +7208,7 @@ Source.prototype = {
 };
 
 module.exports = Source;
-},{"./configuration":17,"./translation":37,"./utils":40}],30:[function(require,module,exports){
+},{"./configuration":18,"./translation":38,"./utils":41}],31:[function(require,module,exports){
 
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
@@ -6722,7 +7297,7 @@ module.exports = Tml;
 
 
 
-},{"./api_adapters/base":12,"./application":14,"./cache_adapters/base":16,"./configuration":17,"./helpers/scripts":19,"./language":20,"./language_case":21,"./language_case_rule":22,"./language_context":23,"./language_context_rule":24,"./logger":25,"./source":29,"./tokenizers/dom":33,"./translation":37,"./translation_key":38,"./translator":39,"./utils":40}],31:[function(require,module,exports){
+},{"./api_adapters/base":13,"./application":15,"./cache_adapters/base":17,"./configuration":18,"./helpers/scripts":20,"./language":21,"./language_case":22,"./language_case_rule":23,"./language_context":24,"./language_context_rule":25,"./logger":26,"./source":30,"./tokenizers/dom":34,"./translation":38,"./translation_key":39,"./translator":40,"./utils":41}],32:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6814,7 +7389,7 @@ DataTokenizer.prototype = {
 };
 
 module.exports = DataTokenizer;
-},{"../configuration":17,"../tokens/data":34,"../tokens/method":35,"../tokens/piped":36}],32:[function(require,module,exports){
+},{"../configuration":18,"../tokens/data":35,"../tokens/method":36,"../tokens/piped":37}],33:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7014,7 +7589,7 @@ DecorationTokenizer.prototype = {
 
 
 module.exports = DecorationTokenizer;
-},{"../configuration":17,"../utils":40}],33:[function(require,module,exports){
+},{"../configuration":18,"../utils":41}],34:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7492,7 +8067,7 @@ DomTokenizer.prototype = {
 };
 
 module.exports = DomTokenizer;
-},{"../configuration":17,"../utils":40}],34:[function(require,module,exports){
+},{"../configuration":18,"../utils":41}],35:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7873,7 +8448,7 @@ DataToken.prototype = {
 };
 
 module.exports = DataToken;
-},{"../configuration":17,"../decorators/html":18,"../logger":25,"../utils":40}],35:[function(require,module,exports){
+},{"../configuration":18,"../decorators/html":19,"../logger":26,"../utils":41}],36:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7964,7 +8539,7 @@ MethodToken.prototype.getDecorationName = function() {
 module.exports = MethodToken;
 
 
-},{"../decorators/html":18,"../utils":40,"./data":34}],36:[function(require,module,exports){
+},{"../decorators/html":19,"../utils":41,"./data":35}],37:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8230,7 +8805,7 @@ PipedToken.prototype.getDecorationName = function() {
 module.exports = PipedToken;
 
 
-},{"../decorators/html":18,"../utils":40,"./data":34}],37:[function(require,module,exports){
+},{"../decorators/html":19,"../utils":41,"./data":35}],38:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8322,7 +8897,7 @@ module.exports = Translation;
 
 
 
-},{"./tokens/data":34,"./utils":40}],38:[function(require,module,exports){
+},{"./tokens/data":35,"./utils":41}],39:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8517,7 +9092,7 @@ TranslationKey.prototype = {
 module.exports = TranslationKey;
 
 
-},{"./configuration":17,"./decorators/html":18,"./tokenizers/data":31,"./tokenizers/decoration":32,"./translation":37,"./utils":40}],39:[function(require,module,exports){
+},{"./configuration":18,"./decorators/html":19,"./tokenizers/data":32,"./tokenizers/decoration":33,"./translation":38,"./utils":41}],40:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8571,7 +9146,7 @@ Translator.prototype = {
 
 module.exports = Translator;
 
-},{"./utils":40}],40:[function(require,module,exports){
+},{"./utils":41}],41:[function(require,module,exports){
 (function (Buffer){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
@@ -8683,7 +9258,7 @@ module.exports = {
   },
 
   generateSourceKey: function(label) {
-    return md5(label);
+    return md5(label.call && label() || label);
   },
 
   generateKey: function(label, description) {
@@ -8924,4 +9499,4 @@ module.exports = {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"./md5":26,"buffer":7}]},{},[5]);
+},{"./md5":27,"buffer":8}]},{},[6]);
