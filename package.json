@@ -44,6 +44,7 @@
     "test": "grunt test"
   },
   "dependencies": {
+    "tiny-emitter": "^1.0.2",
     "tml-js": "~0.4.9"
   },
   "devDependencies": {
@@ -74,5 +75,6 @@
     "travis-cov": {
       "threshold": 0
     }
-  }
+  },
+  "browserify-shim": {}
 }
