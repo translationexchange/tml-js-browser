@@ -134,7 +134,7 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
 });
 
 module.exports = Ajax;
-},{"tml-js":31}],2:[function(require,module,exports){
+},{"tml-js":34}],2:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -311,7 +311,7 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
 });
 
 module.exports = Browser;
-},{"tml-js":31}],3:[function(require,module,exports){
+},{"tml-js":34}],3:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -446,7 +446,7 @@ Inline.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
 });
 
 module.exports = Inline;
-},{"tml-js":31}],4:[function(require,module,exports){
+},{"tml-js":34}],4:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -618,7 +618,7 @@ module.exports = {
   setCookie:            helpers.setCookie,
   includeAgent:         helpers.includeAgent
 };
-},{"tml-js":31}],5:[function(require,module,exports){
+},{"tml-js":34}],5:[function(require,module,exports){
 
 var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var"];
 var scripts     = ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "code", "ruby"];
@@ -744,532 +744,559 @@ module.exports = {
 
 // entry point for browserify
 
-var tml           = require('tml-js');
-var helpers       = require('./helpers');
-var DomTokenizer  = require('./tokenizers/dom');
+(function (root, factory) {
+  function addToRoot(result) {
+    //for backwards compatibility - always copy everything to global object
+    if (root) {
 
-var DEFAULT_HOST  = "https://api.translationexchange.com";
-var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
-
-tml = tml.utils.extend(tml, {
-  version: '0.4.26',
-
-  app:            null,
-  block_options:  [],
-  root_element:   null,
-  options:        {},
-
-  /**
-   * Initializes TML library
-   * @param options
-   * @param callback
-   */
-  init: function(options, callback) {
-    options = options || {};
-
-    tml.options   = options;
-    tml.config.debug  = (options.debug ? options.debug : tml.config.debug);
-
-    options.preferred_languages = options.preferred_languages || helpers.getBrowserLanguages();
-
-    if(!options.current_source) {
-      options.current_source = function(){
-        return helpers.getCurrentSource({});
-      };
-    }
-
-    if (tml.config.debug || options.info){
-      helpers.printWelcomeMessage(tml.version);
-    }
-
-    tml.initApplication(options, function(){
-      tml.startKeyListener();
-      tml.startSourceListener(options);
-      tml.updateLanguageSelector();
-      if(callback) { callback(); }
-    });
-  },
-  
-  // submit any newly registered keys every 3 seconds
-  startKeyListener: function() {
-    if(tml.getApplication().isInlineModeEnabled()) {
-      var app   = tml.getApplication();
-      var freq  = 3000;
-      setInterval(function(){
-        app.submitMissingTranslationKeys();
-      }, freq);
-    }
-  },
-
-  refreshSource: function(options){
-    var self    = this;
-    var source  = helpers.getCurrentSource(options);
-    var app     = tml.getApplication();
-    var key     = tml.utils.generateKey(source); // utils
-    var locale  = app.current_locale; 
-
-    var updateSource = function(){
-      if (self.tokenizer){
-        self.tokenizer.updateAllNodes();
-      }
-    };
-
-    if(!app.getSource(source)) {
-      app.loadSources([source], locale, function(sources) {
-        if (sources.length > 0 && sources[0] && sources[0].sources && sources[0].sources.length > 0) {
-          app.loadSources(sources[0].sources, app.current_locale, updateSource);
-        } else {
-          updateSource();
+      for (var key in result) {
+        if (result.hasOwnProperty(key)) {
+          root[key] = result[key];
         }
-      });
-    }
-  },
-
-  //  keep track of route changes and update source
-  startSourceListener: function(options){   
-    var self = this;
-    var app = tml.getApplication();
-    
-    function setSource(method){
-      return function() {
-        if(method) { method.apply(history, arguments); }
-        self.refreshSource(options);
-      };
-    }
-
-    window.history.pushState     = setSource(window.history.pushState);
-    window.history.replaceState  = setSource(window.history.replaceState);
-    window.addEventListener('popstate', setSource());
-  },
-
-  /**
-   * Initializes application
-   *
-   * @param options
-   * @param callback
-   */
-  initApplication: function(options, callback) {
-    var t0 = new Date();
-
-    var cookie = helpers.getCookie(options.key);
-
-    var cache_version = null;
-
-    if (options.cache && options.cache.version)
-      cache_version = options.cache.version;
-
-    tml.config.registerApiAdapter('ajax', require('./api_adapters/ajax'));
-    tml.config.api = 'ajax';
-
-    tml.config.registerCacheAdapters({
-      inline:      require('./cache_adapters/inline'),
-      browser:     require('./cache_adapters/browser')
-    });
-
-    options = tml.utils.merge(tml.config, {
-      delayed_flush:      true,
-      api:                "ajax",
-      current_source:     helpers.getCurrentSource(options),
-      current_locale:     helpers.getCurrentLocale(options.key, options.current_locale),
-      current_translator: cookie.translator ? new tml.Translator(cookie.translator) : null,
-      accepted_locales:   window.navigator.languages,
-      cache: {
-        enabled: true,
-        adapter: "browser",
-        version: cache_version
       }
-    }, options);
-
-    options.fetch_version = (options.cache.adapter == 'browser' && !cache_version);
-
-    tml.config.initCache(options.key);
-    // console.log(options);
-
-    tml.app = new tml.Application({
-      key:    options.key,
-      token:  options.token,
-      host:   options.host || DEFAULT_HOST
-    });
-
-    tml.app.init(options, function (err) {
-      if (err) {
-        throw new Error(err);
-      }
-
-      if ((options.translateBody || options.translate_body) && mutationObserver) {
-        tml.translateElement(document);
-      }
-
-      tml.domReady(function(){
-        
-        if ((options.translateBody || options.translate_body) && !mutationObserver) {
-          tml.translateElement(document.body);
-        }
-
-        var t1 = new Date();
-        tml.logger.debug("page render took " + (t1 - t0) + " mls");
-
-        if ((options.translateTitle || options.translate_title) && document.title !== "") {
-          document.title = tml.translateLabel(document.title);
-        }
-
-        if (!options.agent) options.agent = {};
-
-        helpers.includeAgent(tml.app, {
-          host:       options.agent.host,
-          cache:      options.agent.cache || 864000000,
-          domains:    options.agent.domains || {},
-          locale:     tml.app.current_locale,
-          source:     tml.app.current_source,
-          sdk:        options.sdk || 'tml-js v' + tml.version,
-          css:        tml.app.css,
-          languages:  tml.app.languages
-        }, function () {
-          if (callback) callback();
-        });
-
-        if (typeof(options.onLoad) == "function") {
-          options.onLoad(tml.app);
-        }
-      });
-
-      // if version is hardcoded - don't bother checking the version
-      if (options.fetch_version) {
-        setTimeout(function () {
-          tml.config.getCache().fetchVersion(function (current_version) {
-            tml.app.getApiClient().getReleaseVersion(function (new_version) {
-              if (current_version != new_version)
-                tml.config.getCache().clear();
-            });
-          });
-        }, 1000);
-      }
-    });
-  },
-
-  /**
-   * Fires when DOM is ready
-   *
-   * @param fn
-   */
-  domReady: function(fn){
-    if (!document.readyState || /ded|te/.test(document.readyState)) {
-      fn();
-    } else {
-      document.addEventListener("DOMContentLoaded", fn, false);
     }
-  },
-
-  /**
-   * Changes language
-   *
-   * @param locale
-   */
-  changeLanguage: function(locale) {
-    tml.app.changeLanguage(locale, function(language) {
-      helpers.updateCurrentLocale(tml.options.key, locale);
-      tml.config.currentLanguage = tml.app.getCurrentLanguage();
-
-      if (this.tokenizer){
-        this.tokenizer.updateAllNodes();
-      }
-
-      tml.updateLanguageSelector();
-
-      if (tml.utils.isFunction(tml.options.onLanguageChange)){
-        tml.options.onLanguageChange(language);
-      }
-    }.bind(this));
-  },
-
-
-
-
-
-
-  /**
-   * Translates a string
-   *
-   * @param label
-   * @param description
-   * @param tokens
-   * @param options
-   * @returns {*}
-   */
-  translate: function(label, description, tokens, options) {
-    if(!tml.app) {
-      throw new Error("Invalid application.");
-    }
-
-    var params = tml.utils.normalizeParams(label, description, tokens, options);
-    params.label = params.label.replace(/\s\s+/g, ' ');
-
-    params.options = tml.utils.extend({}, {
-      current_locale:     tml.app.current_locale,
-      current_source:     tml.app.current_source,
-      current_translator: tml.app.current_translator,
-      block_options:      (tml.block_options || [])
-    }, params.options);
-    
-    return tml.app.getCurrentLanguage().translate(params);
-  },
-
-  /**
-   * Translates a label
-   *
-   * @param label
-   * @param description
-   * @param tokens
-   * @param options
-   * @returns {*}
-   */
-  translateLabel: function(label, description, tokens, options) {
-    var params = tml.utils.normalizeParams(label, description, tokens, options);
-    params.options.skip_decorations = true;
-    return tml.translate(params);
-  },
-
-  /**
-   * Translates an element
-   *
-   * @param container
-   */
-  translateElement: function(container) {
-    container = (typeof container === "string") ? document.getElementById(container) : container;
-
-    tml.config.currentLanguage = tml.app.getCurrentLanguage();
-
-    this.tokenizer = new DomTokenizer(container, {}, {
-      debug:              false,
-      current_source:     tml.app.current_source || 'index',
-      current_translator: tml.app.current_translator
-    });
-
-    if(/ded|te/.test(document.readyState)) {
-      this.tokenizer.translateDOM(document.body);
-      this.translateNow();
-    } else if (mutationObserver) {
-      if(document.body) {
-        this.tokenizer.translateDOM(document.body);
-      }
-      this.translateNow();
-    }
-  },
-
-  /**
-   * Translates DOM
-   */
-  translateNow: function(){
-    var observer, tokenizer = this.tokenizer;
-    var moHandler = function(mutations) {
-      var nodeList = [];
-      if (mutations.length > 0) {
-        mutations.forEach(function(mutation) {
-          var target = mutation.target;
-          var nodes = mutation.addedNodes || [];
-          
-          if (nodes.length > 0) {
-            for (var i = nodes.length - 1; i > -1; i--) {
-              var node = nodes[i];
-              if(node.tagName && node.tagName.toLowerCase().indexOf("tml:") != -1) continue;
-              if(node.tagName && node.tagName.toLowerCase().indexOf("script") != -1) continue;
-              nodeList.push(node);
-            }
-          }
-        });
-
-        nodeList.forEach(function(n){
-          tokenizer.translateDOM(n);
-        });
-
-        if(document.readyState == "interactive") {
-          //observer.disconnect();
-        }
-      }  
-    };
-
-    observer = new mutationObserver(moHandler);
-    observer.observe(document, {
-      subtree: true,
-      attributes: true,
-      attributeOldValue: false,
-      childList: true,
-      characterData: true,
-      characterDataOldValue: false
-    });
-  },
-
-  /**
-   * Translates text nodes
-   *
-   * @param parent_node
-   * @param text_node
-   * @param label
-   */
-  translateTextNode: function(parent_node, text_node, label) {
-    // we need to handle empty spaces better
-    var sanitized_label = tml.utils.sanitizeString(label);
-    if (tml.utils.isNumber(sanitized_label)) return;
-    if (sanitized_label === null || sanitized_label.length === 0) return;
-    var translation = this.translate(sanitized_label);
-
-    if (/^\s/.test(label)) translation = " " + translation;
-    if (/\s$/.test(label)) translation = translation + " ";
-
-    var translated_node = document.createElement("span");
-    // translated_node.style.border = '1px dotted green';
-    translated_node.innerHTML = translation;
-
-    // translated_node.style.border = '1px dotted red';
-    parent_node.replaceChild(translated_node, text_node);
-  },
-
-  /**
-   * Translates text elements
-   *
-   * @param element
-   */
-  translateTextElements: function(element) {
-    if (tml.utils.element('tml_status_node')) return;
-
-    console.log("Initializing text nodes...");
-
-    // add node to the document so it is not processed twice
-    var status_node = document.createElement('div');
-    status_node.id = 'tml_status_node';
-    status_node.style.display = 'none';
-    document.body.appendChild(status_node);
-
-    var text_nodes = [];
-    var tree_walker = document.createTreeWalker(element || document.body, NodeFilter.SHOW_TEXT, null, false);
-    while (tree_walker.nextNode()) {
-      text_nodes.push(tree_walker.currentNode);
-    }
-
-    console.log("Found " + text_nodes.length + " text nodes");
-
-    var disable_sentences = true;
-
-    for (i = 0; i < text_nodes.length; i++) {
-      var current_node = text_nodes[i];
-      var parent_node = current_node.parentNode;
-
-      if (!parent_node) continue;
-
-      // no scripts
-      if (parent_node.tagName == "script" || parent_node.tagName == "SCRIPT") continue;
-
-      var label = current_node.nodeValue || "";
-
-      // console.log(label);
-
-      // no html image tags
-      if (label.indexOf("<img") != -1) continue;
-
-      // no comments
-      if (label.indexOf("<!-") != -1) continue;
-
-      var sentences = label.split(". ");
-      this.translateTextNode(parent_node, current_node, label);
-    }
-  },
-
-  /**
-   * Returns application
-   *
-   * @returns {*}
-   */
-  getApplication: function() {
-    return tml.app;
-  },
-
-  /**
-   * Returns current source
-   *
-   * @returns {*}
-   */
-  getCurrentSource: function() {
-    return tml.app.current_source;
-  },
-
-  /**
-   * Returns current translator
-   *
-   * @returns {*}
-   */
-  getCurrentTranslator: function() {
-    return tml.app.current_translator;
-  },
-
-  /**
-   * Returns current language
-   *
-   * @returns {*}
-   */
-  getCurrentLanguage: function() {
-    return tml.app.getCurrentLanguage();
-  },
-
-  /**
-   * Encloses block options
-   *
-   * @param options
-   * @param callback
-   */
-  block: function(options, callback) {
-    tml.block_options.unshift(options);
-    callback();
-    tml.block_options.pop();
-  },
-
-  /**
-   * Begins block options
-   *
-   * @param options
-   */
-  beginBlock:  function(options) {
-    tml.block_options.unshift(options);
-  },
-
-  /**
-   * Ends block options
-   */
-  endBlock: function() {
-    tml.block_options.pop();
-  },
-
-  /**
-   * Clears cache
-   */
-  clearCache: function() {
-    tml.config.getCache().clear();
   }
 
-});
+  if (typeof define === 'function' && define.amd) {
+    console.log('amd load');
+    define([], factory);
+  }
+  else if (typeof exports === 'object') {
+    console.log('exports load', module);
+    module.exports = factory();
+    addToRoot(module.exports);
+  }
+  else {
+    console.log('global load');
+    addToRoot(factory());
+  }
+}(window, function () {
+
+    var tml = require('tml-js');
+    var helpers = require('./helpers');
+    var DomTokenizer = require('./tokenizers/dom');
+    var Emitter = require('tiny-emitter');
+    var emitter = new Emitter();
+
+    var DEFAULT_HOST = "https://api.translationexchange.com";
+    var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
+
+    tml = tml.utils.extend(tml, {
+      version: '0.4.26',
+
+      on: emitter.on.bind(emitter),
+      off: emitter.off.bind(emitter),
+      once: emitter.once.bind(emitter),
+      emit: emitter.emit.bind(emitter),
+
+      app: null,
+      block_options: [],
+      root_element: null,
+      options: {},
+
+      /**
+       * Initializes TML library
+       * @param options
+       * @param callback
+       */
+      init: function (options, callback) {
+        options = options || {};
+
+        tml.options = options;
+        tml.config.debug = (options.debug ? options.debug : tml.config.debug);
+
+        options.preferred_languages = options.preferred_languages || helpers.getBrowserLanguages();
+
+        if (!options.current_source) {
+          options.current_source = function () {
+            return helpers.getCurrentSource({});
+          };
+        }
+
+        if (tml.config.debug || options.info) {
+          helpers.printWelcomeMessage(tml.version);
+        }
+
+        tml.initApplication(options, function () {
+          tml.startKeyListener();
+          tml.startSourceListener(options);
+          if (callback) {
+            callback();
+          }
+        });
+      },
+
+      // submit any newly registered keys every 3 seconds
+      startKeyListener: function () {
+        if (tml.getApplication().isInlineModeEnabled()) {
+          var app = tml.getApplication();
+          var freq = 3000;
+          setInterval(function () {
+            app.submitMissingTranslationKeys();
+          }, freq);
+        }
+      },
+
+      refreshSource: function (options) {
+        var self = this;
+        var source = helpers.getCurrentSource(options);
+        var app = tml.getApplication();
+        var key = tml.utils.generateKey(source); // utils
+        var locale = app.current_locale;
+
+        var updateSource = function () {
+          if (self.tokenizer) {
+            self.tokenizer.updateAllNodes();
+          }
+        };
+
+        if (!app.getSource(source)) {
+          app.loadSources([source], locale, function (sources) {
+            if (sources.length > 0 && sources[0] && sources[0].sources && sources[0].sources.length > 0) {
+              app.loadSources(sources[0].sources, app.current_locale, updateSource);
+            } else {
+              updateSource();
+            }
+          });
+        }
+      },
+
+      //  keep track of route changes and update source
+      startSourceListener: function (options) {
+        var self = this;
+        var app = tml.getApplication();
+
+        function setSource(method) {
+          return function () {
+            if (method) {
+              method.apply(history, arguments);
+            }
+            self.refreshSource(options);
+          };
+        }
+
+        window.history.pushState = setSource(window.history.pushState);
+        window.history.replaceState = setSource(window.history.replaceState);
+        window.addEventListener('popstate', setSource());
+      },
+
+      /**
+       * Initializes application
+       *
+       * @param options
+       * @param callback
+       */
+      initApplication: function (options, callback) {
+        var t0 = new Date();
+
+        var cookie = helpers.getCookie(options.key);
+
+        var cache_version = null;
+
+        if (options.cache && options.cache.version)
+          cache_version = options.cache.version;
+
+        tml.config.registerApiAdapter('ajax', require('./api_adapters/ajax'));
+        tml.config.api = 'ajax';
+
+        tml.config.registerCacheAdapters({
+          inline: require('./cache_adapters/inline'),
+          browser: require('./cache_adapters/browser')
+        });
+
+        options = tml.utils.merge(tml.config, {
+          delayed_flush: true,
+          api: "ajax",
+          current_source: helpers.getCurrentSource(options),
+          current_locale: helpers.getCurrentLocale(options.key, options.current_locale),
+          current_translator: cookie.translator ? new tml.Translator(cookie.translator) : null,
+          accepted_locales: window.navigator.languages,
+          cache: {
+            enabled: true,
+            adapter: "browser",
+            version: cache_version
+          }
+        }, options);
+
+        options.fetch_version = (options.cache.adapter == 'browser' && !cache_version);
+
+        tml.config.initCache(options.key);
+        // console.log(options);
+
+        tml.app = new tml.Application({
+          key: options.key,
+          token: options.token,
+          host: options.host || DEFAULT_HOST
+        });
+
+        tml.app.init(options, function (err) {
+
+          if ((options.translateBody || options.translate_body) && mutationObserver) {
+            tml.translateElement(document);
+          }
+
+          tml.domReady(function () {
+
+            if ((options.translateBody || options.translate_body) && !mutationObserver) {
+              tml.translateElement(document.body);
+            }
+
+            var t1 = new Date();
+            tml.logger.debug("page render took " + (t1 - t0) + " mls");
+
+            if ((options.translateTitle || options.translate_title) && document.title !== "") {
+              document.title = tml.translateLabel(document.title);
+            }
+
+            if (!options.agent) options.agent = {};
+
+            helpers.includeAgent(tml.app, {
+              host: options.agent.host,
+              cache: options.agent.cache || 864000000,
+              domains: options.agent.domains || {},
+              locale: tml.app.current_locale,
+              source: tml.app.current_source,
+              sdk: options.sdk || 'tml-js v' + tml.version,
+              css: tml.app.css,
+              languages: tml.app.languages
+            }, function () {
+              if (callback) callback();
+            });
+
+            if (typeof(options.onLoad) == "function") {
+              options.onLoad(tml.app);
+            }
+          });
+
+          // if version is hardcoded - don't bother checking the version
+          if (options.fetch_version) {
+            setTimeout(function () {
+              tml.config.getCache().fetchVersion(function (current_version) {
+                tml.app.getApiClient().getReleaseVersion(function (new_version) {
+                  if (current_version != new_version)
+                    tml.config.getCache().clear();
+                });
+              });
+            }, 1000);
+          }
+        });
+      },
+
+      /**
+       * Fires when DOM is ready
+       *
+       * @param fn
+       */
+      domReady: function (fn) {
+        if (!document.readyState || /ded|te/.test(document.readyState)) {
+          fn();
+        } else {
+          document.addEventListener("DOMContentLoaded", fn, false);
+        }
+      },
+
+      /**
+       * Changes language
+       *
+       * @param locale
+       */
+      changeLanguage: function (locale) {
+        tml.app.changeLanguage(locale, function (language) {
+          helpers.updateCurrentLocale(tml.options.key, locale);
+          tml.config.currentLanguage = tml.app.getCurrentLanguage();
+
+          if (this.tokenizer) {
+            this.tokenizer.updateAllNodes();
+          }
+
+          if (tml.utils.isFunction(tml.options.onLanguageChange)) {
+            tml.options.onLanguageChange(language);
+          }
+
+          tml.emit('language-change', language);
+        }.bind(this));
+      },
 
 
-/**
- * browser window extensions and helpers
- *
- * @type {Tml.translate|Function}
- */
+      /**
+       * Translates a string
+       *
+       * @param label
+       * @param description
+       * @param tokens
+       * @param options
+       * @returns {*}
+       */
+      translate: function (label, description, tokens, options) {
+        if (!tml.app) {
+          throw new Error("Invalid application.");
+        }
 
-window.tml                    = tml;
-window.tr                     = tml.translate;
-window.trl                    = tml.translateLabel;
-window.tre                    = tml.translateElement;
-window.tml_application        = tml.getApplication;
-window.tml_current_source     = tml.getCurrentSource;
-window.tml_current_translator = tml.getCurrentTranslator;
-window.tml_current_language   = tml.getCurrentLanguage;
-window.tml_block              = tml.block;
-window.tml_begin_block        = tml.beginBlock;
-window.tml_end_block          = tml.endBlock;
+        var params = tml.utils.normalizeParams(label, description, tokens, options);
+        params.label = params.label.replace(/\s\s+/g, ' ');
 
+        params.options = tml.utils.extend({}, {
+          current_locale: tml.app.current_locale,
+          current_source: tml.app.current_source,
+          current_translator: tml.app.current_translator,
+          block_options: (tml.block_options || [])
+        }, params.options);
 
-window.util = tml.utils; // TODO: is it being used?
+        return tml.app.getCurrentLanguage().translate(params);
+      },
 
-},{"./api_adapters/ajax":1,"./cache_adapters/browser":2,"./cache_adapters/inline":3,"./helpers":4,"./tokenizers/dom":7,"tml-js":31}],7:[function(require,module,exports){
+      /**
+       * Translates a label
+       *
+       * @param label
+       * @param description
+       * @param tokens
+       * @param options
+       * @returns {*}
+       */
+      translateLabel: function (label, description, tokens, options) {
+        var params = tml.utils.normalizeParams(label, description, tokens, options);
+        params.options.skip_decorations = true;
+        return tml.translate(params);
+      },
+
+      /**
+       * Translates an element
+       *
+       * @param container
+       */
+      translateElement: function (container) {
+        container = (typeof container === "string") ? document.getElementById(container) : container;
+
+        tml.config.currentLanguage = tml.app.getCurrentLanguage();
+
+        this.tokenizer = new DomTokenizer(container, {}, {
+          debug: false,
+          current_source: tml.app.current_source || 'index',
+          current_translator: tml.app.current_translator
+        });
+
+        if (/ded|te/.test(document.readyState)) {
+          this.tokenizer.translateDOM(document.body);
+          this.translateNow();
+        } else if (mutationObserver) {
+          if (document.body) {
+            this.tokenizer.translateDOM(document.body);
+          }
+          this.translateNow();
+        }
+      },
+
+      /**
+       * Translates DOM
+       */
+      translateNow: function () {
+        var observer, tokenizer = this.tokenizer;
+        var moHandler = function (mutations) {
+          var nodeList = [];
+          if (mutations.length > 0) {
+            mutations.forEach(function (mutation) {
+              var target = mutation.target;
+              var nodes = mutation.addedNodes || [];
+
+              if (nodes.length > 0) {
+                for (var i = nodes.length - 1; i > -1; i--) {
+                  var node = nodes[i];
+                  if (node.tagName && node.tagName.toLowerCase().indexOf("tml:") != -1) continue;
+                  if (node.tagName && node.tagName.toLowerCase().indexOf("script") != -1) continue;
+                  nodeList.push(node);
+                }
+              }
+            });
+
+            nodeList.forEach(function (n) {
+              tokenizer.translateDOM(n);
+            });
+
+            if (document.readyState == "interactive") {
+              //observer.disconnect();
+            }
+          }
+        };
+
+        observer = new mutationObserver(moHandler);
+        observer.observe(document, {
+          subtree: true,
+          attributes: true,
+          attributeOldValue: false,
+          childList: true,
+          characterData: true,
+          characterDataOldValue: false
+        });
+      },
+
+      /**
+       * Translates text nodes
+       *
+       * @param parent_node
+       * @param text_node
+       * @param label
+       */
+      translateTextNode: function (parent_node, text_node, label) {
+        // we need to handle empty spaces better
+        var sanitized_label = tml.utils.sanitizeString(label);
+        if (tml.utils.isNumber(sanitized_label)) return;
+        if (sanitized_label === null || sanitized_label.length === 0) return;
+        var translation = this.translate(sanitized_label);
+
+        if (/^\s/.test(label)) translation = " " + translation;
+        if (/\s$/.test(label)) translation = translation + " ";
+
+        var translated_node = document.createElement("span");
+        // translated_node.style.border = '1px dotted green';
+        translated_node.innerHTML = translation;
+
+        // translated_node.style.border = '1px dotted red';
+        parent_node.replaceChild(translated_node, text_node);
+      },
+
+      /**
+       * Translates text elements
+       *
+       * @param element
+       */
+      translateTextElements: function (element) {
+        if (tml.utils.element('tml_status_node')) return;
+
+        console.log("Initializing text nodes...");
+
+        // add node to the document so it is not processed twice
+        var status_node = document.createElement('div');
+        status_node.id = 'tml_status_node';
+        status_node.style.display = 'none';
+        document.body.appendChild(status_node);
+
+        var text_nodes = [];
+        var tree_walker = document.createTreeWalker(element || document.body, NodeFilter.SHOW_TEXT, null, false);
+        while (tree_walker.nextNode()) {
+          text_nodes.push(tree_walker.currentNode);
+        }
+
+        console.log("Found " + text_nodes.length + " text nodes");
+
+        var disable_sentences = true;
+
+        for (i = 0; i < text_nodes.length; i++) {
+          var current_node = text_nodes[i];
+          var parent_node = current_node.parentNode;
+
+          if (!parent_node) continue;
+
+          // no scripts
+          if (parent_node.tagName == "script" || parent_node.tagName == "SCRIPT") continue;
+
+          var label = current_node.nodeValue || "";
+
+          // console.log(label);
+
+          // no html image tags
+          if (label.indexOf("<img") != -1) continue;
+
+          // no comments
+          if (label.indexOf("<!-") != -1) continue;
+
+          var sentences = label.split(". ");
+          this.translateTextNode(parent_node, current_node, label);
+        }
+      },
+
+      /**
+       * Returns application
+       *
+       * @returns {*}
+       */
+      getApplication: function () {
+        return tml.app;
+      },
+
+      /**
+       * Returns current source
+       *
+       * @returns {*}
+       */
+      getCurrentSource: function () {
+        return tml.app.current_source;
+      },
+
+      /**
+       * Returns current translator
+       *
+       * @returns {*}
+       */
+      getCurrentTranslator: function () {
+        return tml.app.current_translator;
+      },
+
+      /**
+       * Returns current language
+       *
+       * @returns {*}
+       */
+      getCurrentLanguage: function () {
+        return tml.app.getCurrentLanguage();
+      },
+
+      /**
+       * Encloses block options
+       *
+       * @param options
+       * @param callback
+       */
+      block: function (options, callback) {
+        tml.block_options.unshift(options);
+        callback();
+        tml.block_options.pop();
+      },
+
+      /**
+       * Begins block options
+       *
+       * @param options
+       */
+      beginBlock: function (options) {
+        tml.block_options.unshift(options);
+      },
+
+      /**
+       * Ends block options
+       */
+      endBlock: function () {
+        tml.block_options.pop();
+      },
+
+      /**
+       * Clears cache
+       */
+      clearCache: function () {
+        tml.config.getCache().clear();
+      }
+
+    });
+
+    return {
+      tml: tml,
+      tr: tml.translate,
+      trl: tml.translateLabel,
+      tre: tml.translateElement,
+      tml_application: tml.getApplication,
+      tml_current_source: tml.getCurrentSource,
+      tml_current_translator: tml.getCurrentTranslator,
+      tml_current_language: tml.getCurrentLanguage,
+      tml_block: tml.block,
+      tml_begin_block: tml.beginBlock,
+      tml_end_block: tml.endBlock,
+
+      util: tml.utils
+    };
+  }
+));
+
+},{"./api_adapters/ajax":1,"./cache_adapters/browser":2,"./cache_adapters/inline":3,"./helpers":4,"./tokenizers/dom":7,"tiny-emitter":12,"tml-js":34}],7:[function(require,module,exports){
 var tml         = require('tml-js');
 var config      = tml.config;
 var utils       = tml.utils;
@@ -1679,15 +1706,13 @@ DomTokenizer.prototype = {
 
 module.exports = DomTokenizer;
 
-},{"../helpers/dom-helpers":5,"tml-js":31}],8:[function(require,module,exports){
-(function (global){
+},{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
-/* eslint-disable no-proto */
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
@@ -1727,22 +1752,20 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
-  ? global.TYPED_ARRAY_SUPPORT
-  : (function () {
-      function Bar () {}
-      try {
-        var arr = new Uint8Array(1)
-        arr.foo = function () { return 42 }
-        arr.constructor = Bar
-        return arr.foo() === 42 && // typed array instances can be augmented
-            arr.constructor === Bar && // constructor can be set
-            typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
-            arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
-      } catch (e) {
-        return false
-      }
-    })()
+Buffer.TYPED_ARRAY_SUPPORT = (function () {
+  function Bar () {}
+  try {
+    var arr = new Uint8Array(1)
+    arr.foo = function () { return 42 }
+    arr.constructor = Bar
+    return arr.foo() === 42 && // typed array instances can be augmented
+        arr.constructor === Bar && // constructor can be set
+        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+        arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+  } catch (e) {
+    return false
+  }
+})()
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -1898,16 +1921,10 @@ function fromJsonObject (that, object) {
   return that
 }
 
-if (Buffer.TYPED_ARRAY_SUPPORT) {
-  Buffer.prototype.__proto__ = Uint8Array.prototype
-  Buffer.__proto__ = Uint8Array
-}
-
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
-    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -3224,7 +3241,6 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -3473,6 +3489,89 @@ module.exports = isArray || function (val) {
 };
 
 },{}],12:[function(require,module,exports){
+function E () {
+	// Keep this empty so it's easier to inherit from
+  // (via https://github.com/lipsmack from https://github.com/scottcorgan/tiny-emitter/issues/3)
+}
+
+E.prototype = {
+	on: function (name, callback, ctx) {
+    var e = this.e || (this.e = {});
+
+    (e[name] || (e[name] = [])).push({
+      fn: callback,
+      ctx: ctx
+    });
+
+    return this;
+  },
+
+  once: function (name, callback, ctx) {
+    var self = this;
+    function listener () {
+      self.off(name, listener);
+      callback.apply(ctx, arguments);
+    };
+
+    listener._ = callback
+    return this.on(name, listener, ctx);
+  },
+
+  emit: function (name) {
+    var data = [].slice.call(arguments, 1);
+    var evtArr = ((this.e || (this.e = {}))[name] || []).slice();
+    var i = 0;
+    var len = evtArr.length;
+
+    for (i; i < len; i++) {
+      evtArr[i].fn.apply(evtArr[i].ctx, data);
+    }
+
+    return this;
+  },
+
+  off: function (name, callback) {
+    var e = this.e || (this.e = {});
+    var evts = e[name];
+    var liveEvents = [];
+
+    if (evts && callback) {
+      for (var i = 0, len = evts.length; i < len; i++) {
+        if (evts[i].fn !== callback && evts[i].fn._ !== callback)
+          liveEvents.push(evts[i]);
+      }
+    }
+
+    // Remove event from queue to prevent memory leak
+    // Suggested by https://github.com/lazd
+    // Ref: https://github.com/scottcorgan/tiny-emitter/commit/c6ebfaa9bc973b33d110a84a307742b7cf94c953#commitcomment-5024910
+
+    (liveEvents.length)
+      ? e[name] = liveEvents
+      : delete e[name];
+
+    return this;
+  }
+};
+
+module.exports = E;
+
+},{}],13:[function(require,module,exports){
+module.exports = {
+  "default_locale":"en",
+  "languages":[
+    {
+      "locale":"en",
+      "name":"English",
+      "english_name":"English",
+      "native_name":"English",
+      "flag_url":"https://s3-us-west-1.amazonaws.com/trex-snapshots/flags/default/languages/16/en.png"
+    }
+  ],
+  "threshold":1,
+  "css":".tml_not_translated { border-bottom: 1px dotted red; } .tml_translated { border-bottom: 1px dotted green; } .tml_fallback { border-bottom: 1px dotted #e90; } .tml_pending { border-bottom: 1px dotted #e90; } .tml_locked { border-bottom: 1px dotted blue; } .tml_language_case { padding:0px 2px; border: 1px dotted blue; border-radius: 2px; } .tml_token { background: #eee; padding:0px 2px; border: 1px dotted #ccc; border-radius: 2px; color: black; }"
+};
+},{}],14:[function(require,module,exports){
 module.exports = {
 
   enabled: true,
@@ -3501,7 +3600,7 @@ module.exports = {
         br     :  "<br/>",    
         lbrace :  "{",
         rbrace :  "}",
-        trade  :  "&trade;"   
+        trade  :  "&trade;"
       },
       decoration : {
         strong :  "<strong>{$0}</strong>",
@@ -3637,7 +3736,1348 @@ module.exports = {
   }
 
 };
-},{}],13:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
+module.exports = {
+  "locale": "en",
+  "english_name": "English",
+  "flag_url": "https://s3-us-west-1.amazonaws.com/trex-snapshots/flags/default/languages/16/en.png",
+  "contexts": {
+    "list": {
+      "rules": {
+        "other": {
+          "description": "{token} contains at least 2 elements"
+        },
+        "one": {
+          "description": "{token} contains 1 element",
+          "conditions": "(= 1 @count)",
+          "conditions_expression": [
+            "=",
+            1,
+            "@count"
+          ]
+        }
+      },
+      "keys": [
+        "one",
+        "other"
+      ],
+      "default_key": "other",
+      "token_expression": "/.*(items|list)(\\d)*$/",
+      "variables": [
+        "@count"
+      ],
+      "token_mapping": [
+        "unsupported",
+        {
+          "one": "{$0}",
+          "other": "{$1}"
+        }
+      ]
+    },
+    "date": {
+      "rules": {
+        "future": {
+          "description": "{token} is in the past",
+          "conditions": "(< @date (today))",
+          "conditions_expression": [
+            "<",
+            "@date",
+            [
+              "today"
+            ]
+          ]
+        },
+        "present": {
+          "description": "{token} is in the present",
+          "conditions": "(= @date (today))",
+          "conditions_expression": [
+            "=",
+            "@date",
+            [
+              "today"
+            ]
+          ]
+        },
+        "past": {
+          "description": "{token} is in the future",
+          "conditions": "(> @date (today))",
+          "conditions_expression": [
+            ">",
+            "@date",
+            [
+              "today"
+            ]
+          ]
+        }
+      },
+      "keys": [
+        "past",
+        "present",
+        "future"
+      ],
+      "default_key": "present",
+      "token_expression": "/.*(date|time)(\\d)*$/",
+      "variables": [
+        "@date"
+      ],
+      "token_mapping": [
+        "unsupported",
+        "unsupported",
+        {
+          "past": "{$0}",
+          "present": "{$1}",
+          "future": "{$2}"
+        }
+      ]
+    },
+    "number": {
+      "rules": {
+        "one": {
+          "description": "{token} is 1",
+          "examples": "1",
+          "conditions": "(= @n 1)",
+          "conditions_expression": [
+            "=",
+            "@n",
+            1
+          ]
+        },
+        "other": {
+          "description": "{token} is not 1",
+          "examples": "0, 2-999; 1.2, 2.07..."
+        }
+      },
+      "keys": [
+        "one",
+        "other"
+      ],
+      "default_key": "other",
+      "token_expression": "/.*(count|num|minutes|seconds|hours|sum|total)(\\d)*$/",
+      "variables": [
+        "@n"
+      ],
+      "token_mapping": [
+        {
+          "one": "{$0}",
+          "other": "{$0::plural}"
+        },
+        {
+          "one": "{$0}",
+          "other": "{$1}"
+        }
+      ]
+    },
+    "gender": {
+      "rules": {
+        "female": {
+          "description": "{token} is a female",
+          "conditions": "(= 'female' @gender)",
+          "conditions_expression": [
+            "=",
+            "female",
+            "@gender"
+          ]
+        },
+        "male": {
+          "description": "{token} is a male",
+          "conditions": "(= 'male' @gender)",
+          "conditions_expression": [
+            "=",
+            "male",
+            "@gender"
+          ]
+        },
+        "other": {
+          "description": "{token}'s gender is unknown"
+        }
+      },
+      "keys": [
+        "male",
+        "female",
+        "other"
+      ],
+      "default_key": "other",
+      "token_expression": "/.*(user|translator|profile|actor|target)(\\d)*$/",
+      "variables": [
+        "@gender"
+      ],
+      "token_mapping": [
+        {
+          "other": "{$0}"
+        },
+        {
+          "male": "{$0}",
+          "female": "{$1}",
+          "other": "{$0}/{$1}"
+        },
+        {
+          "male": "{$0}",
+          "female": "{$1}",
+          "other": "{$2}"
+        }
+      ]
+    },
+    "genders": {
+      "rules": {
+        "female": {
+          "description": "{token} contains 1 female",
+          "conditions": "(&& (= 1 (count @genders)) (all @genders 'female'))",
+          "conditions_expression": [
+            "&&",
+            [
+              "=",
+              1,
+              [
+                "count",
+                "@genders"
+              ]
+            ],
+            [
+              "all",
+              "@genders",
+              "female"
+            ]
+          ]
+        },
+        "male": {
+          "description": "{token} contains 1 male",
+          "conditions": "(&& (= 1 (count @genders)) (all @genders 'male'))",
+          "conditions_expression": [
+            "&&",
+            [
+              "=",
+              1,
+              [
+                "count",
+                "@genders"
+              ]
+            ],
+            [
+              "all",
+              "@genders",
+              "male"
+            ]
+          ]
+        },
+        "other": {
+          "description": "{token} contains at least 2 people"
+        },
+        "unknown": {
+          "description": "{token} contains 1 person with unknown gender",
+          "conditions": "(&& (= 1 (count @genders)) (all @genders 'unknown'))",
+          "conditions_expression": [
+            "&&",
+            [
+              "=",
+              1,
+              [
+                "count",
+                "@genders"
+              ]
+            ],
+            [
+              "all",
+              "@genders",
+              "unknown"
+            ]
+          ]
+        }
+      },
+      "keys": [
+        "male",
+        "female",
+        "unknown",
+        "other"
+      ],
+      "default_key": "other",
+      "token_expression": "/.*(users|profiles|actors|targets)(\\d)*$/",
+      "variables": [
+        "@genders"
+      ],
+      "token_mapping": [
+        {
+          "male": "{$0}",
+          "female": "{$0}",
+          "unknown": "{$0}",
+          "other": "{$0}"
+        },
+        {
+          "male": "{$0}",
+          "female": "{$0}",
+          "unknown": "{$0}",
+          "other": "{$1}"
+        },
+        {
+          "male": "{$0}",
+          "female": "{$1}",
+          "unknown": "{$0}/{$1}",
+          "other": "{$2}"
+        },
+        {
+          "male": "{$0}",
+          "female": "{$1}",
+          "unknown": "{$2}",
+          "other": "{$3}"
+        }
+      ]
+    }
+  },
+  "cases": {
+    "times": {
+      "rules": [
+        {
+          "description": "replace '1' with 'once'",
+          "conditions": "(= 1 @value)",
+          "conditions_expression": [
+            "=",
+            1,
+            "@value"
+          ],
+          "operations": "(replace '1' 'once' @value)",
+          "operations_expression": [
+            "replace",
+            "1",
+            "once",
+            "@value"
+          ]
+        },
+        {
+          "description": "replace '2' with 'twice'",
+          "conditions": "(= 2 @value)",
+          "conditions_expression": [
+            "=",
+            2,
+            "@value"
+          ],
+          "operations": "(replace '2' 'twice' @value)",
+          "operations_expression": [
+            "replace",
+            "2",
+            "twice",
+            "@value"
+          ]
+        },
+        {
+          "description": "in all other cases, append x times",
+          "conditions": "(true)",
+          "conditions_expression": [
+            "true"
+          ],
+          "operations": "(append ' times' @value)",
+          "operations_expression": [
+            "append",
+            " times",
+            "@value"
+          ]
+        }
+      ],
+      "latin_name": "Iteration",
+      "description": "The iteration form of the cardinal numbers",
+      "application": "phrase"
+    },
+    "plural": {
+      "rules": [
+        {
+          "description": "Uncountable word",
+          "conditions": "(in 'sheep,fish,series,species,money,rice,information,equipment' @value)",
+          "conditions_expression": [
+            "in",
+            "sheep,fish,series,species,money,rice,information,equipment",
+            "@value"
+          ],
+          "operations": "@value",
+          "operations_expression": "@value"
+        },
+        {
+          "description": "Irregular word",
+          "conditions": "(= 'move' @value)",
+          "conditions_expression": [
+            "=",
+            "move",
+            "@value"
+          ],
+          "operations": "(quote 'moves')",
+          "operations_expression": [
+            "quote",
+            "moves"
+          ]
+        },
+        {
+          "description": "Irregular word",
+          "conditions": "(= 'sex' @value)",
+          "conditions_expression": [
+            "=",
+            "sex",
+            "@value"
+          ],
+          "operations": "(quote 'sexes')",
+          "operations_expression": [
+            "quote",
+            "sexes"
+          ]
+        },
+        {
+          "description": "Irregular word",
+          "conditions": "(= 'child' @value)",
+          "conditions_expression": [
+            "=",
+            "child",
+            "@value"
+          ],
+          "operations": "(quote 'children')",
+          "operations_expression": [
+            "quote",
+            "children"
+          ]
+        },
+        {
+          "description": "Irregular word",
+          "conditions": "(= 'person' @value)",
+          "conditions_expression": [
+            "=",
+            "person",
+            "@value"
+          ],
+          "operations": "(quote 'people')",
+          "operations_expression": [
+            "quote",
+            "people"
+          ]
+        },
+        {
+          "conditions": "(match '/(quiz)$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(quiz)$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(quiz)$/i' '$1zes' @value)",
+          "operations_expression": [
+            "replace",
+            "/(quiz)$/i",
+            "$1zes",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/^(ox)$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/^(ox)$/i",
+            "@value"
+          ],
+          "operations": "(replace '/^(ox)$/i' '$1en' @value)",
+          "operations_expression": [
+            "replace",
+            "/^(ox)$/i",
+            "$1en",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([m|l])ouse$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([m|l])ouse$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([m|l])ouse$/i' '$1ice' @value)",
+          "operations_expression": [
+            "replace",
+            "/([m|l])ouse$/i",
+            "$1ice",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(matr|vert|ind)ix|ex$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(matr|vert|ind)ix|ex$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(matr|vert|ind)ix|ex$/i' '$1ices' @value)",
+          "operations_expression": [
+            "replace",
+            "/(matr|vert|ind)ix|ex$/i",
+            "$1ices",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(x|ch|ss|sh)$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(x|ch|ss|sh)$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(x|ch|ss|sh)$/i' '$1es' @value)",
+          "operations_expression": [
+            "replace",
+            "/(x|ch|ss|sh)$/i",
+            "$1es",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([^aeiouy]|qu)y$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([^aeiouy]|qu)y$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([^aeiouy]|qu)y$/i' '$1ies' @value)",
+          "operations_expression": [
+            "replace",
+            "/([^aeiouy]|qu)y$/i",
+            "$1ies",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([^aeiouy]|qu)ies$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([^aeiouy]|qu)ies$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([^aeiouy]|qu)ies$/i' '$1y' @value)",
+          "operations_expression": [
+            "replace",
+            "/([^aeiouy]|qu)ies$/i",
+            "$1y",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(hive)$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(hive)$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(hive)$/i' '$1s' @value)",
+          "operations_expression": [
+            "replace",
+            "/(hive)$/i",
+            "$1s",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(?:([^f])fe|([lr])f)$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(?:([^f])fe|([lr])f)$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(?:([^f])fe|([lr])f)$/i' '$1$2ves' @value)",
+          "operations_expression": [
+            "replace",
+            "/(?:([^f])fe|([lr])f)$/i",
+            "$1$2ves",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/sis$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/sis$/i",
+            "@value"
+          ],
+          "operations": "(replace '/sis$/i' 'ses' @value)",
+          "operations_expression": [
+            "replace",
+            "/sis$/i",
+            "ses",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([ti])um$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([ti])um$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([ti])um$/i' '$1a' @value)",
+          "operations_expression": [
+            "replace",
+            "/([ti])um$/i",
+            "$1a",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(buffal|tomat|potat)o$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(buffal|tomat|potat)o$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(buffal|tomat|potat)o$/i' '$1oes' @value)",
+          "operations_expression": [
+            "replace",
+            "/(buffal|tomat|potat)o$/i",
+            "$1oes",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(bu)s$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(bu)s$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(bu)s$/i' '$1ses' @value)",
+          "operations_expression": [
+            "replace",
+            "/(bu)s$/i",
+            "$1ses",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(alias|status)$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(alias|status)$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(alias|status)$/i' '$1es' @value)",
+          "operations_expression": [
+            "replace",
+            "/(alias|status)$/i",
+            "$1es",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(octop)us$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(octop)us$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(octop)us$/i' '$1i' @value)",
+          "operations_expression": [
+            "replace",
+            "/(octop)us$/i",
+            "$1i",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(ax|test)is$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(ax|test)is$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(ax|test)is$/i' '$1es' @value)",
+          "operations_expression": [
+            "replace",
+            "/(ax|test)is$/i",
+            "$1es",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/us$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/us$/i",
+            "@value"
+          ],
+          "operations": "(replace '/us$/i' '$1es' @value)",
+          "operations_expression": [
+            "replace",
+            "/us$/i",
+            "$1es",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/s$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/s$/i",
+            "@value"
+          ],
+          "operations": "(replace '/s$/i' 's' @value)",
+          "operations_expression": [
+            "replace",
+            "/s$/i",
+            "s",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/$/' @value)",
+          "conditions_expression": [
+            "match",
+            "/$/",
+            "@value"
+          ],
+          "operations": "(replace '/$/' 's' @value)",
+          "operations_expression": [
+            "replace",
+            "/$/",
+            "s",
+            "@value"
+          ]
+        }
+      ],
+      "latin_name": "Plural",
+      "description": "Converts singular form to plural",
+      "application": "phrase"
+    },
+    "ordinal": {
+      "rules": [
+        {
+          "description": "replace 1 with 'first'",
+          "conditions": "(= 1 @value)",
+          "conditions_expression": [
+            "=",
+            1,
+            "@value"
+          ],
+          "operations": "(replace 1 'first' @value)",
+          "operations_expression": [
+            "replace",
+            1,
+            "first",
+            "@value"
+          ]
+        },
+        {
+          "description": "replace 2 with 'second'",
+          "conditions": "(= 2 @value)",
+          "conditions_expression": [
+            "=",
+            2,
+            "@value"
+          ],
+          "operations": "(replace 2 'first' @value)",
+          "operations_expression": [
+            "replace",
+            2,
+            "first",
+            "@value"
+          ]
+        },
+        {
+          "description": "replace 3 with 'third'",
+          "conditions": "(= 3 @value)",
+          "conditions_expression": [
+            "=",
+            3,
+            "@value"
+          ],
+          "operations": "(replace 3 'third' @value)",
+          "operations_expression": [
+            "replace",
+            3,
+            "third",
+            "@value"
+          ]
+        }
+      ],
+      "latin_name": "Ordinal",
+      "description": "The adjective form of the cardinal numbers",
+      "application": "phrase"
+    },
+    "ord": {
+      "rules": [
+        {
+          "description": "append 'st' if value ends in 1, but not in 11",
+          "examples": "1, 21, 31, 41, 101, 121...",
+          "conditions": "(&& (match '/1$/' @value) (! (match '/11$/' @value)))",
+          "conditions_expression": [
+            "&&",
+            [
+              "match",
+              "/1$/",
+              "@value"
+            ],
+            [
+              "!",
+              [
+                "match",
+                "/11$/",
+                "@value"
+              ]
+            ]
+          ],
+          "operations": "(append 'st' @value)",
+          "operations_expression": [
+            "append",
+            "st",
+            "@value"
+          ]
+        },
+        {
+          "description": "append 'nd' if value ends in 2, but not in 12",
+          "examples": "2, 22, 32, 42, 102, 122...",
+          "conditions": "(&& (match '/2$/' @value) (! (match '/12$/' @value)))",
+          "conditions_expression": [
+            "&&",
+            [
+              "match",
+              "/2$/",
+              "@value"
+            ],
+            [
+              "!",
+              [
+                "match",
+                "/12$/",
+                "@value"
+              ]
+            ]
+          ],
+          "operations": "(append 'nd' @value)",
+          "operations_expression": [
+            "append",
+            "nd",
+            "@value"
+          ]
+        },
+        {
+          "description": "append 'nd' if value ends in 3, but not in 13",
+          "examples": "3, 23, 33, 43, 103, 123...",
+          "conditions": "(&& (match '/3$/' @value) (! (match '/13$/' @value)))",
+          "conditions_expression": [
+            "&&",
+            [
+              "match",
+              "/3$/",
+              "@value"
+            ],
+            [
+              "!",
+              [
+                "match",
+                "/13$/",
+                "@value"
+              ]
+            ]
+          ],
+          "operations": "(append 'rd' @value)",
+          "operations_expression": [
+            "append",
+            "rd",
+            "@value"
+          ]
+        },
+        {
+          "description": "append 'th' in all other cases",
+          "examples": "0, 4, 5, 6, 7, 8, 9, 11, 12, 13, 111, 113...",
+          "conditions": "(true)",
+          "conditions_expression": [
+            "true"
+          ],
+          "operations": "(append 'th' @value)",
+          "operations_expression": [
+            "append",
+            "th",
+            "@value"
+          ]
+        }
+      ],
+      "latin_name": "Ordinal",
+      "description": "The adjective form of the cardinal numbers",
+      "application": "phrase"
+    },
+    "singular": {
+      "rules": [
+        {
+          "description": "Uncountable word",
+          "conditions": "(in 'sheep,fish,series,species,money,rice,information,equipment' @value)",
+          "conditions_expression": [
+            "in",
+            "sheep,fish,series,species,money,rice,information,equipment",
+            "@value"
+          ],
+          "operations": "@value",
+          "operations_expression": "@value"
+        },
+        {
+          "description": "Irregular word",
+          "conditions": "(= 'moves' @value)",
+          "conditions_expression": [
+            "=",
+            "moves",
+            "@value"
+          ],
+          "operations": "(quote 'move')",
+          "operations_expression": [
+            "quote",
+            "move"
+          ]
+        },
+        {
+          "description": "Irregular word",
+          "conditions": "(= 'sexes' @value)",
+          "conditions_expression": [
+            "=",
+            "sexes",
+            "@value"
+          ],
+          "operations": "(quote 'sex')",
+          "operations_expression": [
+            "quote",
+            "sex"
+          ]
+        },
+        {
+          "description": "Irregular word",
+          "conditions": "(= 'children' @value)",
+          "conditions_expression": [
+            "=",
+            "children",
+            "@value"
+          ],
+          "operations": "(quote 'child')",
+          "operations_expression": [
+            "quote",
+            "child"
+          ]
+        },
+        {
+          "description": "Irregular word",
+          "conditions": "(= 'people' @value)",
+          "conditions_expression": [
+            "=",
+            "people",
+            "@value"
+          ],
+          "operations": "(quote 'person')",
+          "operations_expression": [
+            "quote",
+            "person"
+          ]
+        },
+        {
+          "conditions": "(match '/(n)ews$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(n)ews$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(n)ews$/i' '$1ews' @value)",
+          "operations_expression": [
+            "replace",
+            "/(n)ews$/i",
+            "$1ews",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([ti])a$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([ti])a$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([ti])a$/i' '$1um' @value)",
+          "operations_expression": [
+            "replace",
+            "/([ti])a$/i",
+            "$1um",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/((a)naly|(b)a|(d)iagno|(p)arenthe|(p)rogno|(s)ynop|(t)he)ses$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/((a)naly|(b)a|(d)iagno|(p)arenthe|(p)rogno|(s)ynop|(t)he)ses$/i",
+            "@value"
+          ],
+          "operations": "(replace '/((a)naly|(b)a|(d)iagno|(p)arenthe|(p)rogno|(s)ynop|(t)he)ses$/i' '$1$2sis' @value)",
+          "operations_expression": [
+            "replace",
+            "/((a)naly|(b)a|(d)iagno|(p)arenthe|(p)rogno|(s)ynop|(t)he)ses$/i",
+            "$1$2sis",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(^analy)ses$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(^analy)ses$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(^analy)ses$/i' '$1sis' @value)",
+          "operations_expression": [
+            "replace",
+            "/(^analy)ses$/i",
+            "$1sis",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([^f])ves$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([^f])ves$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([^f])ves$/i' '$1fe' @value)",
+          "operations_expression": [
+            "replace",
+            "/([^f])ves$/i",
+            "$1fe",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(hive)s$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(hive)s$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(hive)s$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(hive)s$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(tive)s$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(tive)s$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(tive)s$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(tive)s$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([lr])ves$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([lr])ves$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([lr])ves$/i' '$1f' @value)",
+          "operations_expression": [
+            "replace",
+            "/([lr])ves$/i",
+            "$1f",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([^aeiouy]|qu)ies$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([^aeiouy]|qu)ies$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([^aeiouy]|qu)ies$/i' '$1y' @value)",
+          "operations_expression": [
+            "replace",
+            "/([^aeiouy]|qu)ies$/i",
+            "$1y",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(s)eries$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(s)eries$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(s)eries$/i' '$1eries' @value)",
+          "operations_expression": [
+            "replace",
+            "/(s)eries$/i",
+            "$1eries",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(m)ovies$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(m)ovies$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(m)ovies$/i' '$1ovie' @value)",
+          "operations_expression": [
+            "replace",
+            "/(m)ovies$/i",
+            "$1ovie",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(x|ch|ss|sh)es$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(x|ch|ss|sh)es$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(x|ch|ss|sh)es$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(x|ch|ss|sh)es$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/([m|l])ice$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/([m|l])ice$/i",
+            "@value"
+          ],
+          "operations": "(replace '/([m|l])ice$/i' '$1ouse' @value)",
+          "operations_expression": [
+            "replace",
+            "/([m|l])ice$/i",
+            "$1ouse",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(bus)es$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(bus)es$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(bus)es$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(bus)es$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(o)es$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(o)es$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(o)es$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(o)es$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(shoe)s$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(shoe)s$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(shoe)s$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(shoe)s$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(cris|ax|test)es$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(cris|ax|test)es$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(cris|ax|test)es$/i' '$1is' @value)",
+          "operations_expression": [
+            "replace",
+            "/(cris|ax|test)es$/i",
+            "$1is",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(octop|vir)i$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(octop|vir)i$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(octop|vir)i$/i' '$1us' @value)",
+          "operations_expression": [
+            "replace",
+            "/(octop|vir)i$/i",
+            "$1us",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(alias|status)es$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(alias|status)es$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(alias|status)es$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(alias|status)es$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/^(ox)en$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/^(ox)en$/i",
+            "@value"
+          ],
+          "operations": "(replace '/^(ox)en$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/^(ox)en$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(vert|ind)ices$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(vert|ind)ices$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(vert|ind)ices$/i' '$1ex' @value)",
+          "operations_expression": [
+            "replace",
+            "/(vert|ind)ices$/i",
+            "$1ex",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(matr)ices$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(matr)ices$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(matr)ices$/i' '$1ix' @value)",
+          "operations_expression": [
+            "replace",
+            "/(matr)ices$/i",
+            "$1ix",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(quiz)zes$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(quiz)zes$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(quiz)zes$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(quiz)zes$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/(us)es$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/(us)es$/i",
+            "@value"
+          ],
+          "operations": "(replace '/(us)es$/i' '$1' @value)",
+          "operations_expression": [
+            "replace",
+            "/(us)es$/i",
+            "$1",
+            "@value"
+          ]
+        },
+        {
+          "conditions": "(match '/s$/i' @value)",
+          "conditions_expression": [
+            "match",
+            "/s$/i",
+            "@value"
+          ],
+          "operations": "(replace '/s$/i' '' @value)",
+          "operations_expression": [
+            "replace",
+            "/s$/i",
+            "",
+            "@value"
+          ]
+        }
+      ],
+      "latin_name": "Singular",
+      "description": "Converts plural form to singular",
+      "application": "phrase"
+    },
+    "pos": {
+      "rules": [
+        {
+          "description": "if value ends in s, append '",
+          "conditions": "(match '/s$/' @value)",
+          "conditions_expression": [
+            "match",
+            "/s$/",
+            "@value"
+          ],
+          "operations": "(append \"'\" @value)",
+          "operations_expression": [
+            "append",
+            "'",
+            "@value"
+          ]
+        },
+        {
+          "description": "in all other cases, append 's",
+          "conditions": "(true)",
+          "conditions_expression": [
+            "true"
+          ],
+          "operations": "(append \"'s\" @value)",
+          "operations_expression": [
+            "append",
+            "'s",
+            "@value"
+          ]
+        }
+      ],
+      "latin_name": "Possessive",
+      "description": "Used to indicate possession (i.e., ownership). It is usually created by adding 's to the word",
+      "application": "phrase"
+    }
+  }
+};
+},{}],16:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -3707,7 +5147,7 @@ Base.prototype = {
 };
 
 module.exports = Base;
-},{}],14:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -3739,14 +5179,14 @@ module.exports = Base;
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-var logger      = require("./logger");
-var utils       = require("./utils");
-var config      = require("./configuration");
+var logger = require("./logger");
+var utils = require("./utils");
+var config = require("./configuration");
 var BaseAdapter = require('./api_adapters/base');
 
 var API_PATH = "/v1/";
 
-var CDN_URL   = 'https://cdn.translationexchange.com';
+var CDN_URL = 'https://cdn.translationexchange.com';
 // var CDN_URL      = 'https://trex-snapshots.s3-us-west-1.amazonaws.com';
 
 /**
@@ -3755,7 +5195,7 @@ var CDN_URL   = 'https://cdn.translationexchange.com';
  * @param app
  * @constructor
  */
-var ApiClient = function(app) {
+var ApiClient = function (app) {
   this.application = app;
   this.cache = config.getCache();
   var adapter_class = config.getApiAdapter(config.api);
@@ -3774,7 +5214,7 @@ ApiClient.prototype = {
    * @param callback
    * @returns {{path: *, params: *, options: (*|{}), callback: *}}
    */
-  normalizeParams: function(path, params, options, callback) {
+  normalizeParams: function (path, params, options, callback) {
     if (utils.isFunction(params)) {
       callback = params;
       params = {};
@@ -3790,7 +5230,7 @@ ApiClient.prototype = {
    * Gets the latest release version from the API
    * @param callback
    */
-  getReleaseVersion: function(callback) {
+  getReleaseVersion: function (callback) {
     var self = this;
 
     // fetch the current version from the server and set it in the cache
@@ -3813,10 +5253,10 @@ ApiClient.prototype = {
    * Pulls the latest release and update it in the cache
    * @param callback
    */
-  updateReleaseVersion: function(callback) {
+  updateReleaseVersion: function (callback) {
     var self = this;
-    self.getReleaseVersion(function(new_version) {
-      self.cache.storeVersion(new_version, function(updated_version) {
+    self.getReleaseVersion(function (new_version) {
+      self.cache.storeVersion(new_version, function (updated_version) {
         logger.log("Caching release version as: " + updated_version);
         callback(updated_version);
       });
@@ -3827,7 +5267,7 @@ ApiClient.prototype = {
    * Checks cache first, if the release is undefined, get it and update cache
    * @param callback
    */
-  fetchReleaseVersion: function(callback) {
+  fetchReleaseVersion: function (callback) {
     // we only need to do this once per adapter
     // so if there are multiple API calls from a single adapter,
     // we only do the version check once
@@ -3837,10 +5277,10 @@ ApiClient.prototype = {
     }
 
     var self = this;
-    this.cache.fetchVersion(function(current_version) {
+    this.cache.fetchVersion(function (current_version) {
       // if version is defined in the cache use it.
       if (!current_version || current_version == 'undefined') {
-        self.updateReleaseVersion(function(new_version) {
+        self.updateReleaseVersion(function (new_version) {
           callback(new_version);
         });
       } else {
@@ -3856,7 +5296,7 @@ ApiClient.prototype = {
    * @param key
    * @param callback
    */
-  fetchFromCdn: function(key, callback) {
+  fetchFromCdn: function (key, callback) {
     var self = this;
 
     if (self.cache.version == '0') {
@@ -3884,7 +5324,7 @@ ApiClient.prototype = {
    * @param options
    * @param callback
    */
-  get: function(path, params, options, callback) {
+  get: function (path, params, options, callback) {
     var opts = this.normalizeParams(path, params, options, callback);
     opts.options.method = "get";
     this.api(opts.path, opts.params, opts.options, opts.callback);
@@ -3898,7 +5338,7 @@ ApiClient.prototype = {
    * @param options
    * @param callback
    */
-  post: function(path, params, options, callback) {
+  post: function (path, params, options, callback) {
     var opts = this.normalizeParams(path, params, options, callback);
     opts.options.method = "post";
     this.api(opts.path, opts.params, opts.options, opts.callback);
@@ -3912,13 +5352,13 @@ ApiClient.prototype = {
    * @param options
    * @param callback
    */
-  api: function(path, params, options, callback) {
+  api: function (path, params, options, callback) {
     utils.extend(params, {access_token: this.application.token});
 
     var url = this.application.getHost() + API_PATH + path;
     var self = this;
 
-    var request_callback = function(error, response, body) {
+    var request_callback = function (error, response, body) {
       if (!error && body) {
         callback(error, JSON.parse(body));
       } else {
@@ -3926,38 +5366,32 @@ ApiClient.prototype = {
       }
     };
 
+    var should_use_cache = (!this.application.isInlineModeEnabled() && options.cache_key && this.cache);
+
     if (options.method == "post") {
       self.adapter.post(url, params, request_callback);
-    } else if (!this.application.isInlineModeEnabled() && options.cache_key && this.cache) {
-        self.fetchReleaseVersion(function(version) {
-          self.cache.fetch(options.cache_key, function(cache_callback) {
-            self.fetchFromCdn(options.cache_key, function(error, data) {
-              if (data) {
-                cache_callback(error, data);
-              } else {
-                // TODO: do not go to the API for read-only cache (files based)
-                self.adapter.get(url, params, function (error, response, body) {
-                  if (error)
-                    logger.debug("api error: " + error);
-                  cache_callback(error, body);
-                });
-              }
-            });
-          }, function(error, data) {
+    } else if (should_use_cache) {
+      self.fetchReleaseVersion(function (version) {
+        if (parseInt(version) === 0) {
+          request_callback('No release has been published');
+        } else {
+          self.cache.fetch(options.cache_key, function (cache_callback) {
+            self.fetchFromCdn(options.cache_key, cache_callback);
+          }, function (error, data) {
             if (!error && data) {
               try {
                 data = JSON.parse(data);
               } catch (e) {
-                error = e;
-                data = null;
+                return callback(e);
               }
-              callback(error, data);
+              callback(null, data);
             } else
-              callback(error, null);
+              callback(error);
           });
-        });
+        }
+      });
     } else {
-        self.adapter.get(url, params, request_callback);
+      self.adapter.get(url, params, request_callback);
     }
   }
 
@@ -3965,7 +5399,7 @@ ApiClient.prototype = {
 
 module.exports = ApiClient;
 
-},{"./api_adapters/base":13,"./configuration":18,"./logger":26,"./utils":41}],15:[function(require,module,exports){
+},{"./api_adapters/base":16,"./configuration":21,"./logger":29,"./utils":44}],18:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -4136,10 +5570,6 @@ Application.prototype = {
     return this.sources_by_key[key];
   },
 
-  removeSource: function(key) {
-    delete this.sources_by_key[key];
-  },
-
   /**
    * Returns current source
    *
@@ -4195,15 +5625,18 @@ Application.prototype = {
         cache_key: 'application'
     }, function (err, data) {
 
+      self.default_locale = self.default_locale || "en";
+
+      // missing release
       if (err) {
-        console.log(err);
-        throw err;
+        self.extend(config.getDefaultApplication());
+        self.addLanguage(config.getDefaultLanguage());
+        callback(null);
+        return;
       }
 
       self.extend(data);
       self.loadExtension(data);
-
-      self.default_locale = self.default_locale || "en";
 
       self.current_locale = (
         options.current_locale ||
@@ -4358,10 +5791,6 @@ Application.prototype = {
     return locale + "/sources/" + source;
   },
 
-  getSourceName: function(source) {
-    return source.call && source() || source;
-  },  
-
   /**
    * Loads sources
    *
@@ -4374,7 +5803,6 @@ Application.prototype = {
     var self = this;
 
     sources.forEach(function(source) {
-      source = self.getSourceName(source);
       if (!self.sources_by_key[source]) {
         data[source] = function(callback) {
 
@@ -4399,16 +5827,14 @@ Application.prototype = {
     });
 
     utils.parallel(data, function(err, results) {
-      if (err) {
-        console.log(err);
-        throw err;
-      }
-
       var sources = [];
-      Object.keys(results).forEach(function(key) {
-        sources.push(results[key]);
-        self.addSource(key, locale, results[key]);
-      });
+
+      if (results) {
+        Object.keys(results).forEach(function (key) {
+          sources.push(results[key]);
+          self.addSource(key, locale, results[key]);
+        });
+      }
 
       sources_callback(sources);
     });
@@ -4442,7 +5868,7 @@ Application.prototype = {
   },
 
   registerMissingTranslationKey: function(source_key, translation_key) {
-    //console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
+    //logger.debug("Registering missing translation key: " + source_key + " " + translation_key.label);
 
     this.addMissingElement(source_key, translation_key);
 
@@ -4514,8 +5940,8 @@ Application.prototype = {
           source_key.forEach(function (source) {
             // console.log("Removing " + locale + '/sources/' + source + " from cache");
             // TODO: may not need to remove all sources in path from the cache
-            self.removeSource(source);
-            config.getCache().del(locale + '/sources/' + source, function () {});
+            config.getCache().del(locale + '/sources/' + source, function () {
+            });
           });
         });
       });
@@ -4571,7 +5997,7 @@ Application.prototype = {
 
 module.exports = Application;
 
-},{"./api_client":14,"./configuration":18,"./language":21,"./logger":26,"./source":30,"./utils":41}],16:[function(require,module,exports){
+},{"./api_client":17,"./configuration":21,"./language":24,"./logger":29,"./source":33,"./utils":44}],19:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -4760,7 +6186,7 @@ Cache.prototype = {
 };
 
 module.exports = Cache;
-},{"./cache_adapters/base":17,"./configuration":18,"./utils":41}],17:[function(require,module,exports){
+},{"./cache_adapters/base":20,"./configuration":21,"./utils":44}],20:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -4929,7 +6355,7 @@ Base.prototype = {
 };
 
 module.exports = Base;
-},{"../configuration":18,"../logger":26,"../utils":41}],18:[function(require,module,exports){
+},{"../configuration":21,"../logger":29,"../utils":44}],21:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -4964,7 +6390,9 @@ module.exports = Base;
 var Cache     = require("./cache");
 
 var utils     = require("./utils");
-var defaults  = require("./../config/config.js");
+var defaults  = require("./../config/defaults.js");
+var english  = require("./../config/english.js");
+var application  = require("./../config/application.js");
 
 var Configuration = function() {
   utils.merge(this, defaults);
@@ -4985,6 +6413,25 @@ Configuration.prototype = {
     }
     this.cacheAdapter = new Cache(this.cache);
     return this.cacheAdapter;
+  },
+
+  /**
+   * Returns default application
+   *
+   * @returns {Application}
+   */
+  getDefaultApplication: function() {
+    return application;
+  },
+
+  /**
+   * Returns default language
+   *
+   * @returns {Language}
+   */
+  getDefaultLanguage: function() {
+    // TODO: fetch from CDN
+    return english;
   },
 
   /**
@@ -5161,7 +6608,7 @@ module.exports = new Configuration();
 
 
 
-},{"./../config/config.js":12,"./cache":16,"./utils":41}],19:[function(require,module,exports){
+},{"./../config/application.js":13,"./../config/defaults.js":14,"./../config/english.js":15,"./cache":19,"./utils":44}],22:[function(require,module,exports){
 (function (Buffer){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
@@ -5335,7 +6782,7 @@ module.exports = HTMLDecorator;
 
 
 }).call(this,require("buffer").Buffer)
-},{"../utils":41,"buffer":8}],20:[function(require,module,exports){
+},{"../utils":44,"buffer":8}],23:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -5369,145 +6816,48 @@ module.exports = HTMLDecorator;
 
 var scripts = {
 
-  header: function (app, options) {
+  agent_tag: function (app, options) {
     options = options || {};
 
+    options.cache = options.cache || 864000000;
+    var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
+
+    if (options.cache) {
+      var t = new Date().getTime();
+      t = t - (t % options.cache);
+      agent_host += "?ts=" + t;
+    }
+
+    options.css = options.css || app.css;
+    options.sdk = options.sdk || 'tml-js v0.4.16';
+    options.languages = [];
+
+    for (var l = 0; l < app.languages.length; l++) {
+      var language = app.languages[l];
+      options.languages.push({
+        locale: language.locale,
+        english_name: language.english_name,
+        native_name: language.native_name,
+        flag_url: language.flag_url
+      });
+    }
+
+    //console.log(options);
+
     var html = [];
     html.push("<script>");
-
-    html.push("function tml_add_script(doc, id, src, onload) {");
-    html.push("  var script = doc.createElement('script');");
-    html.push("  script.setAttribute('id', id); script.setAttribute('type', 'application/javascript');");
-    html.push("  script.setAttribute('src', src);");
+    html.push("(function() {");
+    html.push("  var script = document.createElement('script');");
+    html.push("  script.setAttribute('id', 'tml-agent'); script.setAttribute('type', 'application/javascript');");
+    html.push("  script.setAttribute('src', '" + agent_host + "');");
     html.push("  script.setAttribute('charset', 'UTF-8');");
-    html.push("  if (onload) script.onload = onload;");
-    html.push("  doc.getElementsByTagName('head')[0].appendChild(script);");
-    html.push("  return script;");
-    html.push("}");
-
-    //console.log(options.agent);
-
-    if (!options.agent) {
-      options.agent = {
-        type: 'agent',
-        cache: 864000000
-      };
-    }
-
-    if (options.agent.type == "agent") {
-
-      var agent_host = options.agent.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
-
-      if (options.agent.cache) {
-        var t = new Date().getTime();
-        t = t - (t % options.agent.cache);
-        agent_host += "?ts=" + t;
-      }
-
-      options.agent.css = app.css;
-      //options.agent.sdk = 'tml-js v' + Tml.version;
-      options.agent.languages = [];
-
-      for (var l = 0; l < app.languages.length; l++) {
-        var language = app.languages[l];
-        options.agent.languages.push({
-          locale: language.locale,
-          english_name: language.english_name,
-          native_name: language.native_name,
-          flag_url: language.flag_url
-        });
-      }
-
-      html.push("(function() {");
-      html.push("   tml_add_script(window.document, 'tml-agent', '" + agent_host + "', function() {");
-      html.push("       Trex.init('" + app.key + "', " + JSON.stringify(options.agent) + ");");
-      html.push("   });");
-      html.push("})();");
-
-    } else {
-
-      html.push("function tml_add_css(doc, value, inline) {");
-      html.push("  var css = null;");
-      html.push("  if (inline) {");
-      html.push("    css = doc.createElement('style'); css.type = 'text/css';");
-      html.push("    if (css.styleSheet) css.styleSheet.cssText = value;");
-      html.push("    else css.appendChild(document.createTextNode(value));");
-      html.push("  } else {");
-      html.push("    css = doc.createElement('link'); css.setAttribute('type', 'text/css');");
-      html.push("    css.setAttribute('rel', 'stylesheet'); css.setAttribute('media', 'screen');");
-      html.push("    css.setAttribute('href', value);");
-      html.push("  }");
-      html.push("  doc.getElementsByTagName('head')[0].appendChild(css);");
-      html.push("  return css;");
-      html.push("}");
-
-      html.push("(function() {");
-      html.push("  if (window.addEventListener) window.addEventListener('load', tml_init, false);");
-      html.push("  else if (window.attachEvent) window.attachEvent('onload', tml_init);");
-      html.push("  window.setTimeout(function() {tml_init();}, 1000);");
-      html.push("  function tml_init() {");
-      html.push("    if (window.tml_already_initialized) return;");
-      html.push("    window.tml_already_initialized = true;");
-      html.push("    tml_add_css(window.document, '" + app.tools.stylesheet + "', false);");
-      html.push("    tml_add_css(window.document, \"" + app.css + "\", true);");
-      html.push("    tml_add_script(window.document, 'tml-jssdk', '" + app.tools.javascript + "', function() {");
-      html.push("      Tml.app_key = '" + app.key + "';");
-      html.push("      Tml.host = '" + app.tools.host + "';");
-      html.push("      Tml.current_source = '" + app.current_source + "';");
-      html.push("      Tml.default_locale = '" + app.default_locale + "';");
-      html.push("      Tml.page_locale = '" + options.current_language.locale + "';");
-      html.push("      Tml.locale = '" + options.current_language.locale + "';");
-
-      if (app.isFeatureEnabled("shortcuts")) {
-        var keys = Object.keys(app.shortcuts || {});
-        for (var s = 0; s < keys.length; s++) {
-          html.push("shortcut.add('" + keys[s] + "', function() {");
-          html.push(app.shortcuts[keys[s]]);
-          html.push("});");
-        }
-      }
-
-      html.push("      if (typeof(tml_on_ready) === 'function') tml_on_ready();");
-      html.push("      if (typeof(tml_footer_scripts) === 'function') tml_footer_scripts();");
-      html.push("    })");
-      html.push("  }");
-      html.push("})();");
-    }
+    html.push("  script.onload = function() {");
+    html.push("       Trex.init('" + app.key + "', " + JSON.stringify(options) + ");");
+    html.push("  };");
+    html.push("  document.getElementsByTagName('head')[0].appendChild(script);");
+    html.push("})();");
     html.push("</script>");
     return html.join("\n");
-  },
-
-  language_selector_script_tag: function () {
-    var html = [];
-    html.push("<script>");
-    html.push("function tml_change_locale(locale) {");
-    html.push("  var query_parts = window.location.href.split('#');");
-    html.push("  var anchor = query_parts.length > 1 ? query_parts[1] : null;");
-    html.push("  query_parts = query_parts[0].split('?');");
-    html.push("  var query = query_parts.length > 1 ? query_parts[1] : null;");
-    html.push("  var params = {};");
-    html.push("  if (query) {");
-    html.push("    var vars = query.split('&');");
-    html.push("    for (var i = 0; i < vars.length; i++) {");
-    html.push("      var pair = vars[i].split('=');");
-    html.push("      params[pair[0]] = pair[1];");
-    html.push("    }");
-    html.push("  }");
-    html.push("  params['locale'] = locale;");
-    html.push("  query = [];");
-    html.push("  var keys = Object.keys(params);");
-    html.push("  for (i = 0; i < keys.length; i++) {");
-    html.push("    query.push(keys[i] + '=' + params[keys[i]]);");
-    html.push("  }");
-    html.push("  var destination = query_parts[0];");
-    html.push("  if (query.length > 0)");
-    html.push("    destination = destination + '?' + query.join('&');");
-    html.push("  if (anchor)");
-    html.push("    destination = destination + '#' + anchor;");
-    html.push("  window.location = destination;");
-    html.push("}");
-    html.push("</script>");
-    return html.join('');
   },
 
   language_name_tag: function (language, options) {
@@ -5532,453 +6882,28 @@ var scripts = {
     return "<img src='" + language.flag_url + "' style='margin-right:3px;' alt='" + name + "' title='" + name + "'>";
   },
 
-  language_selector_toggle_method: function() {
-    return "Tml.Utils.toggleInlineTranslations()";
-  },
-
-  language_selector_bootstrap: function (app, options) {
-    options = options || {};
-
-    var element = options.element || 'div';
-    var class_name = options.class_name || 'dropdown';
-    var style = options.style || '';
-    var name = options.language || 'english';
-    var toggle = (options.toggle === false ? false : true);
-    var toggle_label = options.toggle_label || 'Help Us Translate';
-    var toggle_label_cancel = options.toggle_label_cancel || 'Disable translation mode';
-    var powered_by = (options.powered_by === false ? false : true);
-
-    var html = [];
-
-    if (!options.client_side)
-      html.push(this.language_selector_script_tag());
-
-    if (element != 'none') {
-      html.push("<" + element + " class='" + class_name + "' style='" + style + "'>");
-    }
-
-    html.push("  <a href='#' role='button' class='" + class_name + "-toggle' data-toggle='" + class_name + "'>");
-
-    html.push(scripts.language_name_tag(options.current_language, {flag: true, name: name}));
-
-    html.push("</a>");
-
-    html.push("<ul class='" + class_name + "-menu' role='menu'>");
-
-    app.languages.forEach(function (lang) {
-      html.push("<li role='presentation'>");
-
-      if (options.current_language.locale == lang.locale) {
-        html.push("<div style='right: 5px;font-weight: bold;font-size: 16px;margin: 0px 5px 0px 0px;color: #13CF80;position: absolute;'>✓</div>");
-      }
-
-      if (options.client_side) {
-        html.push("<a href='javascript:void(0);' onclick='tml.changeLanguage(\"" + lang.locale + "\")'>");
-      } else {
-        html.push("<a href='javascript:void(0);' onclick='tml_change_locale(\"" + lang.locale + "\")'>");
-      }
-      html.push(scripts.language_name_tag(lang, {flag: true, name: name}));
-      html.push("</a></li>");
-    });
-
-    if (toggle) {
-      html.push("<li role='presentation' class='divider'></li>");
-      html.push("<li role='presentation'><a href='javascript:void(0);' onclick='" + this.language_selector_toggle_method() + "'>");
-      if (app.isInlineModeEnabled()) {
-        html.push(toggle_label_cancel);
-      } else {
-        html.push(toggle_label);
-      }
-      html.push("</a>");
-      html.push("</li>");
-    }
-
-    if (powered_by) {
-      html.push("<li role='presentation' class='divider'></li>");
-
-      html.push("<div style='padding: 0px 20px; font-size:11px; white-space: nowrap;'>");
-      html.push("<a href='http://translationexchange.com' style='color:#888;'>");
-      html.push("Powered By Translation Exchange");
-      html.push("</a>");
-      html.push("</div>");
-      html.push("</ul>");
-    }
-
-    if (element != 'none') {
-      html.push("</" + element + ">");
-    }
-
-    return html.join('');
-  },
-
-  language_selector_default: function (app, options) {
-    options = options || {};
-    var html = [];
-    html.push("<a href='#' onclick='Tml.UI.LanguageSelector.show();'>");
-    html.push("<img src='" + options.current_language.flag_url + "'> &nbsp;");
-    html.push(options.current_language.english_name);
-    html.push("</a>");
-    return html.join('');
-  },
-
-  language_selector_popup: function (app, options) {
-    options = options || {};
-    var element = options.element || 'div';
-    var class_name = options.class_name || 'dropdown';
-    var toggle = (options.toggle === false ? false : true);
-    var toggle_label = options.toggle_label || 'Help Us Translate';
-    var toggle_label_cancel = options.toggle_label_cancel || 'Disable translation mode';
-    var powered_by = (options.powered_by === false ? false : true);
-    var name = (options.name || 'english');
-    var html = [];
-
-    html.push("<style>");
-    html.push(".trex-language-selector {position: relative;display: inline-block;vertical-align: middle;}");
-    html.push(".trex-language-toggle,");
-    html.push(".trex-language-toggle:hover,");
-    html.push(".trex-language-toggle:focus {cursor:pointer;text-decoration:none;outline:none;}");
-    html.push(".trex-dropup .trex-dropdown-menu {top: auto;bottom: 100%;margin-bottom: 1px;-webkit-transform: scale(0.8) translateY(10%);transform: scale(0.8) translateY(10%);}");
-    html.push(".trex-dropleft .trex-dropdown-menu {left: auto; right: 0;}");
-    html.push(".trex-dropdown-menu {");
-    html.push("   -webkit-transform: scale(0.8) translateY(10%);transform: scale(0.8) translateY(10%);transition: 0.13s cubic-bezier(0.3, 0, 0, 1.3);opacity: 0;pointer-events: none;");
-    html.push("   display: block;font-family:Arial, sans-serif;position: absolute;");
-    html.push("   top: 100%;left: 0;z-index: 1000;float: left;list-style: none;background-color: #FFF;height:0px;width:0px;padding:0;overflow:hidden;");
-    html.push("}");
-    html.push(".trex-language-selector[dir=rtl] .trex-dropdown-menu {left: auto; right: 0;}");
-    html.push(".trex-language-selector.trex-dropleft[dir=rtl] .trex-dropdown-menu {left:0; right:auto;}");
-    html.push(".trex-language-selector.trex-open .trex-dropdown-menu {");
-    html.push("   opacity: 1;height:auto;width:auto;overflow:hidden;min-width: 250px;margin: 2px 0 0;font-size: 13px;");
-    html.push("   background-clip: padding-box;border: 1px solid rgba(0, 0, 0, 0.15);box-shadow: 0 2px 0 rgba(0, 0, 0, 0.05);");
-    html.push("   border-radius: 4px;color: #6D7C88;text-align: left;padding: 5px 0;");
-    html.push("   display:block;pointer-events: auto;-webkit-transform: none;transform: none;");
-    html.push("}");
-    html.push(".trex-dropdown-menu > li {");
-    html.push("text-align:" + options.current_language.align('left') + ";");
-    html.push("}");
-    html.push(".trex-dropdown-menu > li > a {");
-    html.push("  display: block; text-decoration:none !important; padding: 3px 10px;margin:0 5px;clear: both;font-weight: normal;line-height: 1.42857143;color: #333;border-radius:3px;white-space: nowrap;cursor:pointer;");
-    html.push("}");
-    html.push(".trex-dropdown-menu > li > a .trex-flag {margin-right:3px;width:23px;}");
-    html.push(".trex-dropdown-menu > li.trex-language-item > a:hover,");
-    html.push(".trex-dropdown-menu > li.trex-language-item > a:focus {text-decoration:none !important;background: #F0F2F4;}");
-    html.push(".trex-dropdown-menu > li.trex-language-item > a .trex-native-name {font-size: 11px;color: #A9AFB8;margin-left: 3px;}");
-    html.push(".trex-dropdown-menu > li.trex-selected a:after {content: '✓';right: 5px;font-weight: bold;font-size: 16px;margin: 0px 5px 0px 0px;color: #13CF80;position: absolute;}");
-    html.push(".trex-dropdown-menu[dir=rtl] > li.trex-selected a:after {left: 5px; right:auto !important; margin: 0px 0 0px 5px;}");
-    html.push(".trex-dropdown-menu .trex-credit a {border-top: solid 1px #DDD;font-size: 13px;padding: 7px 0 0;margin: 5px 15px 5px;color: #9FA7AE;font-weight: 400;}");
-    html.push("</style>");
-
-    if (options.element == 'self') {
-      options.container.className += ' trex-language-selector';
-      options.container.dir = options.current_language.direction();
-    } else {
-      html.push("<" + options.element + " class='trex-language-selector' dir='" + options.current_language.direction() + "'>");
-    }
-    html.push("<a class='trex-language-toggle' data-toggle='tml-language-selector' tabindex='0' dir='" + options.current_language.direction() + "'>");
-    html.push(scripts.language_name_tag(options.current_language, {flag: true, name: name}));
-    html.push("</a>");
-
-    html.push("<ul class='trex-dropdown-menu' dir='" + options.current_language.direction() + "'>");
-
-    app.languages.forEach(function (lang) {
-      html.push("<li class='trex-language-item " + (options.current_language.locale == lang.locale ? "trex-selected" : '') + "' dir='" + options.current_language.direction() + "'>");
-
-      if (options.client_side) {
-        html.push("<a href='javascript:void(0);' onclick='tml.changeLanguage(\"" + lang.locale + "\")'>");
-      } else {
-        html.push("<a href='javascript:void(0);' onclick='tml_change_locale(\"" + lang.locale + "\")'>");
-      }
-      html.push(scripts.language_name_tag(lang, {flag: true, name: name}));
-      html.push("</a></li>");
-    });
-
-    if (toggle) {
-      html.push("<li class='trex-credit' dir='" + options.current_language.direction() + "'>");
-      html.push("<a href='javascript:void(0);' onclick='" + this.language_selector_toggle_method() + "'>");
-      if (app.isInlineModeEnabled()) {
-        html.push(toggle_label_cancel);
-      } else {
-        html.push(toggle_label);
-      }
-      html.push("</a>");
-      html.push("</li>");
-    }
-
-    if (powered_by) {
-      html.push("<li class='trex-credit' dir='" + options.current_language.direction() + "'>");
-      html.push("<a href='http://translationexchange.com'>");
-      html.push("Powered by Translation Exchange");
-      html.push("</a>");
-      html.push("</li>");
-    }
-
-    html.push("</ul>");
-
-    if (options.element != 'self') {
-      html.push("</" + options.element + ">");
-    }
-
-    if (!options.client_side) {
-      html.push(scripts.language_selector_script_tag());
-      html.push("<script>");
-      var f = scripts.language_selector_popup_script.toString();
-      f = f.substring(f.indexOf("// begin") + 8 , f.indexOf("// end"));
-      html.push(f);
-      html.push("</script>");
-    }
-
-    return html.join('\n');
-  },
-
-  language_selector_popup_script: function() {
-    // begin
-    (function () {
-      'use strict';
-
-      function addEvent(evnt, elem, func) {
-        if (elem.addEventListener) elem.addEventListener(evnt, func, false);
-        else if (elem.attachEvent) elem.attachEvent('on' + evnt, func);
-        else elem[evnt] = func;
-      }
-
-      function hasClass(elem, cls) {
-        return elem.className.match(new RegExp('(\\s|^)' + cls + '(\\s|$)'));
-      }
-
-      function addClass(elem, cls) {
-        if (!hasClass(elem, cls)) elem.className += ' ' + cls;
-      }
-
-      function removeClass(elem, cls) {
-        if (hasClass(elem, cls)) {
-          var reg = new RegExp('(\\s|^)' + cls + '(\\s|$)');
-          elem.className = elem.className.replace(reg, ' ');
-        }
-      }
-
-      function toggleClass(elem, cls) {
-        if (!hasClass(elem, cls)) addClass(elem, cls);
-        else removeClass(elem, cls);
-      }
-
-      var LanguageSelector = function (element) {
-        this.element = element;
-        this.element.setAttribute('tabindex', '0');
-        addEvent('click', this.element, this.open.bind(this));
-        addEvent('blur', this.element, this.close.bind(this));
-      };
-
-      LanguageSelector.VERSION = '0.1.0';
-      LanguageSelector.prototype = {
-        adjustMenu: function (parent) {
-          removeClass(parent, 'trex-dropup');
-          removeClass(parent, 'trex-dropleft');
-          var
-            menu = parent.querySelectorAll('.trex-dropdown-menu')[0],
-            bounds = menu.getBoundingClientRect(),
-            vHeight = Math.max(document.documentElement.clientHeight, window.innerHeight || 0),
-            vWidth = Math.max(document.documentElement.clientWidth, window.innerWidth || 0),
-            buffer = 10;
-          if (bounds.top + menu.offsetHeight + buffer > vHeight) addClass(parent, 'trex-dropup');
-          if (bounds.left + menu.offsetWidth + buffer > vWidth)  addClass(parent, 'trex-dropleft');
-        },
-        open: function (e) {
-          e = e || window.event;
-          e.stopPropagation();
-          e.preventDefault();
-          var target = e.currentTarget || e.srcElement;
-          if (hasClass(target.parentElement, 'trex-open')) {
-            return this.close(e);
-          }
-          addClass(target.parentElement, 'trex-open');
-          this.adjustMenu(target.parentElement);
-          return false;
-        },
-        close: function (e) {
-          e = e || window.event;
-          var target = e.currentTarget || e.srcElement;
-          setTimeout(function () {
-            removeClass(target.parentElement, 'trex-open');
-          }, 500);
-        }
-      };
-      var selectorList = document.querySelectorAll('[data-toggle=tml-language-selector]');
-      for (var i = 0, el, l = selectorList.length; i < l; i++) {
-        el = selectorList[i];
-        el.languageSelector = new LanguageSelector(el);
-      }
-    })();
-    // end
-  },
-
-  language_selector_init: function(app, type, options) {
-    type = type || 'default';
-    if (type == 'popup') {
-      scripts.language_selector_popup_script();
-    }
-  },
-
-  language_selector_footer: function(app, options) {
-    options = options || {};
-    var toggle = (options.toggle === false ? false : true);
-    var toggle_label = options.toggle_label || 'Help Us Translate';
-    var toggle_label_cancel = options.toggle_label_cancel || 'Disable translation mode';
-    var powered_by = (options.powered_by === false ? false : true);
-
-    var html = [];
-
-    if (toggle) {
-      html.push("<div style='margin-top: 5px;' dir='" + options.current_language.direction() + "'>");
-      html.push("<a href='javascript:void(0);' onclick='" + this.language_selector_toggle_method() + "'>");
-      if (app.isInlineModeEnabled()) {
-        html.push(toggle_label_cancel);
-      } else {
-        html.push(toggle_label);
-      }
-      html.push("</a>");
-      html.push("</div>");
-    }
-
-    if (powered_by) {
-      html.push("<div style='margin-top: 5px;' dir='ltr'>");
-      html.push("<a href='http://translationexchange.com' style='font-size:12px;color: #ccc;'>");
-      html.push("Powered by Translation Exchange");
-      html.push("</a>");
-      html.push("</div>");
-    }
-
-    return html.join('');
-  },
-
-  language_selector_dropdown: function(app, options) {
-    options = options || {};
-    options.style = options.style || "";
-    options.class_name = options.class_name || "";
-    options.name = options.name || "english";
-
-    var html = [];
-
-    if (!options.client_side)
-      html.push(this.language_selector_script_tag());
-
-    var language_method = "tml_change_locale(this.options[this.selectedIndex].value)";
-    if (options.client_side) {
-      language_method = "tml.changeLanguage(this.options[this.selectedIndex].value)";
-    }
-
-    html.push("<select id='tml_language_selector' onchange='" + language_method + "' style='" + options.style + "' class='" + options.class_name + "'>");
-    app.languages.forEach(function (lang) {
-      html.push("<option dir='ltr' value='" + lang.locale + "' " + (options.current_language.locale == lang.locale ? 'selected' : '')  + ">");
-      if (options.name == 'english')
-        html.push(lang.english_name);
-      else
-        html.push(lang.native_name);
-      html.push("</option>");
-    });
-    html.push("</select>");
-
-    html.push(this.language_selector_footer(app, options));
-    return html.join('');
-  },
-
-  language_selector_flags: function(app, options) {
-    options = options || {};
-    options.style = options.style || "";
-    options.class_name = options.class_name || "";
-    options.name = options.name || "english";
-
-    var self = this;
-    var html = [];
-
-    if (!options.client_side)
-      html.push(this.language_selector_script_tag());
-
-    html.push("<div id='tml_language_selector'  style='" + options.style + "' class='" + options.class_name + "'>");
-    app.languages.forEach(function (lang) {
-      if (options.client_side)
-        html.push("<a href='#' onclick=\"tml.changeLanguage('" + lang.locale + "')\">");
-      else
-        html.push("<a href='#' onclick=\"tml_change_locale('" + lang.locale + "')\">");
-
-      html.push(self.language_flag_tag(lang, options));
-      html.push("</a> ");
-    });
-
-    html.push(this.language_selector_footer(app, options));
-    html.push("</div>");
-    return html.join('');
-  },
-
-  language_selector_list: function(app, options) {
-    options = options || {};
-    options.style = options.style || "";
-    options.class_name = options.class_name || "";
-    options.name = options.name || "english";
-    options.flag = true;
-
-    var self = this;
-    var html = [];
-
-    if (!options.client_side)
-      html.push(this.language_selector_script_tag());
-
-    html.push("<div id='tml_language_selector'  style='" + options.style + "' class='" + options.class_name + "'>");
-    app.languages.forEach(function (lang) {
-      html.push("<div>");
-
-      if (options.current_language.locale == lang.locale) {
-        html.push("<div style='float:right; font-weight: bold;font-size: 16px;'>✓</div>");
-        html.push("<strong>");
-      }
-
-      if (options.client_side)
-        html.push("<a href='#' onclick=\"tml.changeLanguage('" + lang.locale + "')\">");
-      else
-        html.push("<a href='#' onclick=\"tml_change_locale('" + lang.locale + "')\">");
-
-      html.push(self.language_name_tag(lang, options));
-      html.push("</a>");
-
-      if (options.current_language.locale == lang.locale) {
-        html.push("</strong>");
-      }
-
-      html.push("</div>");
-    });
-
-    html.push(this.language_selector_footer(app, options));
-    html.push("</div>");
-    return html.join('');
-  },
-
-  language_selector: function (app, type, options) {
+  language_selector_tag: function (app, type, options) {
     type = type || 'default';
 
-    if (type == 'default') {
-      return scripts.language_selector_default(app, options);
-    } else if (type == 'bootstrap') {
-      return scripts.language_selector_bootstrap(app, options);
-    } else if (type == 'popup') {
-      return scripts.language_selector_popup(app, options);
-    } else if (type == 'dropdown') {
-      return scripts.language_selector_dropdown(app, options);
-    } else if (type == 'flags') {
-      return scripts.language_selector_flags(app, options);
-    } else if (type == 'list') {
-      return scripts.language_selector_list(app, options);
+    var attrs = [];
+    var keys = Object.keys(options);
+    for (var i=1; i<keys.length; i++) {
+      attrs.push("data-tml-" + keys[i] + "='" + options[keys[i]] + "'");
     }
+    attrs = attrs.join(' ');
 
-    return "";
+    return "<div data-tml-language-selector='" + type + "' " + attrs + "></div>";
   }
 };
 
 module.exports = {
-  header: scripts.header,
+  header: scripts.agent_tag, // deprecated
+  agent_tag: scripts.agent_tag,
   language_name_tag: scripts.language_name_tag,
   language_flag_tag: scripts.language_flag_tag,
-  language_selector: scripts.language_selector,
-  language_selector_init: scripts.language_selector_init
+  language_selector: scripts.language_selector_tag
 };
-},{}],21:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6082,6 +7007,7 @@ Language.prototype = {
         this.application.verifySourcePath(current_source, source_path);
 
       var source = this.application.getSource(current_source);
+
       if (source && source.isIgnoredKey(translation_key.key)) {
         params.options.ignored = true;
         return translation_key.translate(this, params.tokens, params.options);
@@ -6097,8 +7023,6 @@ Language.prototype = {
         var local_key = this.application.getTranslationKey(translation_key.key);
         if (local_key) translation_key = local_key;
       }
-
-
     }
 
     return translation_key.translate(this, params.tokens, params.options);
@@ -6118,27 +7042,19 @@ Language.prototype = {
     return this.isRightToLeft() ? 'rtl' : 'ltr';
   },
 
-  getSourceName: function(source) {
-    return source.call && source() || source;
-  },
-
   getSourcePath: function(options) {
-
-    if (!options.block_options.length){
-      return [this.getSourceName(options.current_source)];
-    }
+    if (!options.block_options)
+      return [options.current_source];
 
     var source_path = [];
 
     for(var i=0; i<options.block_options.length; i++) {
       var opts = options.block_options[i];
-      if (opts.source) {
-        source_path.push(this.getSourceName(opts.source));
-      }
+      if (opts.source) source_path.push(opts.source);
     }
 
     source_path = source_path.reverse();
-    source_path.unshift(this.getSourceName(options.current_source));
+    source_path.unshift(options.current_source);
 
     return source_path;
   }
@@ -6146,7 +7062,7 @@ Language.prototype = {
 
 module.exports = Language;
 
-},{"./configuration":18,"./language_case":22,"./language_context":24,"./translation_key":39,"./utils":41}],22:[function(require,module,exports){
+},{"./configuration":21,"./language_case":25,"./language_context":27,"./translation_key":42,"./utils":44}],25:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6263,7 +7179,7 @@ LanguageCase.prototype = {
 module.exports = LanguageCase;
 
 
-},{"./configuration":18,"./decorators/html":19,"./language_case_rule":23,"./utils":41}],23:[function(require,module,exports){
+},{"./configuration":21,"./decorators/html":22,"./language_case_rule":26,"./utils":44}],26:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6362,7 +7278,7 @@ LanguageCaseRule.prototype = {
 
 module.exports = LanguageCaseRule;
 
-},{"./rules_engine/evaluator":28,"./rules_engine/parser":29,"./utils":41}],24:[function(require,module,exports){
+},{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":44}],27:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6481,7 +7397,7 @@ LanguageContext.prototype = {
 };
 
 module.exports = LanguageContext;
-},{"./configuration":18,"./language_context_rule":25,"./utils":41}],25:[function(require,module,exports){
+},{"./configuration":21,"./language_context_rule":28,"./utils":44}],28:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6552,7 +7468,7 @@ LanguageContextRule.prototype = {
 };
 
 module.exports = LanguageContextRule;
-},{"./rules_engine/evaluator":28,"./rules_engine/parser":29,"./utils":41}],26:[function(require,module,exports){
+},{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":44}],29:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6618,7 +7534,7 @@ var Logger = {
 };
 
 module.exports = Logger;
-},{"./configuration":18,"./utils":41}],27:[function(require,module,exports){
+},{"./configuration":21,"./utils":44}],30:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -6861,7 +7777,7 @@ var MD5 = function (string) {
 };
 
 module.exports = MD5;
-},{}],28:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7052,7 +7968,7 @@ Evaluator.prototype = {
 
 module.exports = Evaluator;
 
-},{}],29:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7112,7 +8028,7 @@ Parser.prototype = {
 };
 
 module.exports = Parser;
-},{}],30:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7208,7 +8124,7 @@ Source.prototype = {
 };
 
 module.exports = Source;
-},{"./configuration":18,"./translation":38,"./utils":41}],31:[function(require,module,exports){
+},{"./configuration":21,"./translation":41,"./utils":44}],34:[function(require,module,exports){
 
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
@@ -7297,7 +8213,7 @@ module.exports = Tml;
 
 
 
-},{"./api_adapters/base":13,"./application":15,"./cache_adapters/base":17,"./configuration":18,"./helpers/scripts":20,"./language":21,"./language_case":22,"./language_case_rule":23,"./language_context":24,"./language_context_rule":25,"./logger":26,"./source":30,"./tokenizers/dom":34,"./translation":38,"./translation_key":39,"./translator":40,"./utils":41}],32:[function(require,module,exports){
+},{"./api_adapters/base":16,"./application":18,"./cache_adapters/base":20,"./configuration":21,"./helpers/scripts":23,"./language":24,"./language_case":25,"./language_case_rule":26,"./language_context":27,"./language_context_rule":28,"./logger":29,"./source":33,"./tokenizers/dom":37,"./translation":41,"./translation_key":42,"./translator":43,"./utils":44}],35:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7389,7 +8305,7 @@ DataTokenizer.prototype = {
 };
 
 module.exports = DataTokenizer;
-},{"../configuration":18,"../tokens/data":35,"../tokens/method":36,"../tokens/piped":37}],33:[function(require,module,exports){
+},{"../configuration":21,"../tokens/data":38,"../tokens/method":39,"../tokens/piped":40}],36:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -7589,7 +8505,7 @@ DecorationTokenizer.prototype = {
 
 
 module.exports = DecorationTokenizer;
-},{"../configuration":18,"../utils":41}],34:[function(require,module,exports){
+},{"../configuration":21,"../utils":44}],37:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8067,7 +8983,7 @@ DomTokenizer.prototype = {
 };
 
 module.exports = DomTokenizer;
-},{"../configuration":18,"../utils":41}],35:[function(require,module,exports){
+},{"../configuration":21,"../utils":44}],38:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8448,7 +9364,7 @@ DataToken.prototype = {
 };
 
 module.exports = DataToken;
-},{"../configuration":18,"../decorators/html":19,"../logger":26,"../utils":41}],36:[function(require,module,exports){
+},{"../configuration":21,"../decorators/html":22,"../logger":29,"../utils":44}],39:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8539,7 +9455,7 @@ MethodToken.prototype.getDecorationName = function() {
 module.exports = MethodToken;
 
 
-},{"../decorators/html":19,"../utils":41,"./data":35}],37:[function(require,module,exports){
+},{"../decorators/html":22,"../utils":44,"./data":38}],40:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8805,7 +9721,7 @@ PipedToken.prototype.getDecorationName = function() {
 module.exports = PipedToken;
 
 
-},{"../decorators/html":19,"../utils":41,"./data":35}],38:[function(require,module,exports){
+},{"../decorators/html":22,"../utils":44,"./data":38}],41:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -8897,7 +9813,7 @@ module.exports = Translation;
 
 
 
-},{"./tokens/data":35,"./utils":41}],39:[function(require,module,exports){
+},{"./tokens/data":38,"./utils":44}],42:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -9092,7 +10008,7 @@ TranslationKey.prototype = {
 module.exports = TranslationKey;
 
 
-},{"./configuration":18,"./decorators/html":19,"./tokenizers/data":32,"./tokenizers/decoration":33,"./translation":38,"./utils":41}],40:[function(require,module,exports){
+},{"./configuration":21,"./decorators/html":22,"./tokenizers/data":35,"./tokenizers/decoration":36,"./translation":41,"./utils":44}],43:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -9146,7 +10062,7 @@ Translator.prototype = {
 
 module.exports = Translator;
 
-},{"./utils":41}],41:[function(require,module,exports){
+},{"./utils":44}],44:[function(require,module,exports){
 (function (Buffer){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
@@ -9258,7 +10174,9 @@ module.exports = {
   },
 
   generateSourceKey: function(label) {
-    return md5(label.call && label() || label);
+    if (this.isFunction(label))
+      label = label();
+    return md5(label);
   },
 
   generateKey: function(label, description) {
@@ -9278,19 +10196,18 @@ module.exports = {
 
   encode: function(params) {
     if (!params) return null;
-    var data = JSON.stringify(params);
-    data = new Buffer(data, 'utf-8').toString('base64');
-    data = encodeURIComponent(data);
-    data = encodeURIComponent(data);
-    return data;
+    var data = new Buffer(JSON.stringify(params), 'utf-8').toString('base64');
+    return encodeURIComponent(data);
   },
 
   decode: function(data) {
     if (!data) return null;
-    data = decodeURIComponent(data);
-    data = decodeURIComponent(data);
-    var payload_json = new Buffer(data, 'base64').toString('utf-8');
-    return JSON.parse(payload_json);
+    try {
+      return JSON.parse(new Buffer(decodeURIComponent(data), 'base64').toString('utf-8'));
+    } catch (err) {
+      // for backwards compatibility - some SDKs were doing double encoding
+      return JSON.parse(new Buffer(decodeURIComponent(decodeURIComponent(data)), 'base64').toString('utf-8'));
+    }
   },
 
   normalizeSource: function(url) {
@@ -9499,4 +10416,4 @@ module.exports = {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"./md5":27,"buffer":8}]},{},[6]);
+},{"./md5":30,"buffer":8}]},{},[6]);
