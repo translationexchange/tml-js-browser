@@ -782,7 +782,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.30',
+      version: '0.4.31',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
