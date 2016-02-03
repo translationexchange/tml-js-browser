@@ -1,7 +1,7 @@
 {
   "name": "tml-js-browser",
   "description": "Translation plugin for browsers.",
-  "version": "0.4.26",
+  "version": "0.4.27",
   "author": {
     "name": "Michael Berkovich",
     "email": "michael@translationexchange.com"
@@ -76,5 +76,6 @@
       "threshold": 0
     }
   },
-  "browserify-shim": {}
+  "browserify-shim": {
+  }
 }
