@@ -781,7 +781,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.28',
+      version: '0.4.29',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -1708,6 +1708,10 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
+<<<<<<< HEAD
+(function (global){
+=======
+>>>>>>> 6386de99fcb462099b77927274884ccd0f8247c8
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -10184,8 +10188,14 @@ module.exports = {
   },
 
   generateSourceKey: function(label) {
+<<<<<<< HEAD
+    if (this.isFunction(label)){
+      label = label();
+    }
+=======
     if (this.isFunction(label))
       label = label();
+>>>>>>> 6386de99fcb462099b77927274884ccd0f8247c8
     return md5(label);
   },
 
