@@ -781,7 +781,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.26',
+      version: '0.4.29',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -1708,14 +1708,16 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
+<<<<<<< HEAD
 (function (global){
+=======
+>>>>>>> 6386de99fcb462099b77927274884ccd0f8247c8
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
-/* eslint-disable no-proto */
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
@@ -1755,22 +1757,20 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
-  ? global.TYPED_ARRAY_SUPPORT
-  : (function () {
-      function Bar () {}
-      try {
-        var arr = new Uint8Array(1)
-        arr.foo = function () { return 42 }
-        arr.constructor = Bar
-        return arr.foo() === 42 && // typed array instances can be augmented
-            arr.constructor === Bar && // constructor can be set
-            typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
-            arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
-      } catch (e) {
-        return false
-      }
-    })()
+Buffer.TYPED_ARRAY_SUPPORT = (function () {
+  function Bar () {}
+  try {
+    var arr = new Uint8Array(1)
+    arr.foo = function () { return 42 }
+    arr.constructor = Bar
+    return arr.foo() === 42 && // typed array instances can be augmented
+        arr.constructor === Bar && // constructor can be set
+        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+        arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+  } catch (e) {
+    return false
+  }
+})()
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -1926,16 +1926,10 @@ function fromJsonObject (that, object) {
   return that
 }
 
-if (Buffer.TYPED_ARRAY_SUPPORT) {
-  Buffer.prototype.__proto__ = Uint8Array.prototype
-  Buffer.__proto__ = Uint8Array
-}
-
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
-    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -3252,7 +3246,6 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -3628,8 +3621,7 @@ module.exports = {
         span   :  "<span id='{$id}' class='{$class}' style='{$style}'>{$0}</span>",
         h1     :  "<h1>{$0}</h1>",
         h2     :  "<h2>{$0}</h2>",
-        h3     :  "<h3>{$0}</h3>",
-        code   :  "<code>{$0}</code>"
+        h3     :  "<h3>{$0}</h3>"
       }
     },
     text : {
@@ -3667,8 +3659,7 @@ module.exports = {
         span   :  "{$0}",
         h1     :  "{$0}",
         h2     :  "{$0}",
-        h3     :  "{$0}",
-        code   :  "{$0}"
+        h3     :  "{$0}"
       }
     }
   },
@@ -3682,8 +3673,8 @@ module.exports = {
     ignore_elements: ['.notranslate'],
     nodes: {
       ignored:    [],
-      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "ruby"],
-      inline:     ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code"],
+      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "code", "ruby"],
+      inline:     ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var"],
       short:      ["i", "b"],
       splitters:  ["br", "hr"]
     },
@@ -5594,10 +5585,6 @@ Application.prototype = {
     return this.sources_by_key[key];
   },
 
-  removeSource: function(key) {
-    delete this.sources_by_key[key];
-  },
-
   /**
    * Returns current source
    *
@@ -5819,10 +5806,6 @@ Application.prototype = {
     return locale + "/sources/" + source;
   },
 
-  getSourceName: function(source) {
-    return source.call && source() || source;
-  },  
-
   /**
    * Loads sources
    *
@@ -5835,7 +5818,6 @@ Application.prototype = {
     var self = this;
 
     sources.forEach(function(source) {
-      source = self.getSourceName(source);
       if (!self.sources_by_key[source]) {
         data[source] = function(callback) {
 
@@ -5901,7 +5883,7 @@ Application.prototype = {
   },
 
   registerMissingTranslationKey: function(source_key, translation_key) {
-    //console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
+    //logger.debug("Registering missing translation key: " + source_key + " " + translation_key.label);
 
     this.addMissingElement(source_key, translation_key);
 
@@ -5973,8 +5955,8 @@ Application.prototype = {
           source_key.forEach(function (source) {
             // console.log("Removing " + locale + '/sources/' + source + " from cache");
             // TODO: may not need to remove all sources in path from the cache
-            self.removeSource(source);
-            config.getCache().del(locale + '/sources/' + source, function () {});
+            config.getCache().del(locale + '/sources/' + source, function () {
+            });
           });
         });
       });
@@ -7039,6 +7021,7 @@ Language.prototype = {
         this.application.verifySourcePath(current_source, source_path);
 
       var source = this.application.getSource(current_source);
+
       if (source && source.isIgnoredKey(translation_key.key)) {
         params.options.ignored = true;
         return translation_key.translate(this, params.tokens, params.options);
@@ -7054,8 +7037,6 @@ Language.prototype = {
         var local_key = this.application.getTranslationKey(translation_key.key);
         if (local_key) translation_key = local_key;
       }
-
-
     }
 
     return translation_key.translate(this, params.tokens, params.options);
@@ -7075,27 +7056,19 @@ Language.prototype = {
     return this.isRightToLeft() ? 'rtl' : 'ltr';
   },
 
-  getSourceName: function(source) {
-    return source.call && source() || source;
-  },
-
   getSourcePath: function(options) {
-
-    if (!options.block_options.length){
-      return [this.getSourceName(options.current_source)];
-    }
+    if (!options.block_options)
+      return [options.current_source];
 
     var source_path = [];
 
     for(var i=0; i<options.block_options.length; i++) {
       var opts = options.block_options[i];
-      if (opts.source) {
-        source_path.push(this.getSourceName(opts.source));
-      }
+      if (opts.source) source_path.push(opts.source);
     }
 
     source_path = source_path.reverse();
-    source_path.unshift(this.getSourceName(options.current_source));
+    source_path.unshift(options.current_source);
 
     return source_path;
   }
@@ -10215,9 +10188,14 @@ module.exports = {
   },
 
   generateSourceKey: function(label) {
+<<<<<<< HEAD
     if (this.isFunction(label)){
       label = label();
     }
+=======
+    if (this.isFunction(label))
+      label = label();
+>>>>>>> 6386de99fcb462099b77927274884ccd0f8247c8
     return md5(label);
   },
 
