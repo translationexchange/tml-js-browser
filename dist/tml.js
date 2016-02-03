@@ -620,8 +620,7 @@ module.exports = {
 };
 },{"tml-js":32}],5:[function(require,module,exports){
 
-var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var"];
-var scripts     = ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "code", "ruby"];
+var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code"];
 var separators  = ["br", "hr"];
 
 module.exports = {
@@ -782,7 +781,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.26',
+      version: '/* @echo VERSION */',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -980,12 +979,6 @@ module.exports = {
             }, 1000);
           }
         });
-
-        if(document.readyState == "interactive") {
-          if(!tml.options.translateBody || tml.options.disableAutoTranslate) {
-            observer.disconnect();
-          }
-        }
       },
 
       /**
@@ -1120,7 +1113,9 @@ module.exports = {
             });
 
             if (document.readyState == "interactive") {
-              //observer.disconnect();
+              if(!tml.options.translateBody || tml.options.disableAutoTranslate) {
+                observer.disconnect();
+              }
             }
           }
         };
@@ -3618,7 +3613,8 @@ module.exports = {
         span   :  "<span id='{$id}' class='{$class}' style='{$style}'>{$0}</span>",
         h1     :  "<h1>{$0}</h1>",
         h2     :  "<h2>{$0}</h2>",
-        h3     :  "<h3>{$0}</h3>"
+        h3     :  "<h3>{$0}</h3>",
+        code   :  "<code>{$0}</code>"
       }
     },
     text : {
@@ -3656,7 +3652,8 @@ module.exports = {
         span   :  "{$0}",
         h1     :  "{$0}",
         h2     :  "{$0}",
-        h3     :  "{$0}"
+        h3     :  "{$0}",
+        code   :  "{$0}"
       }
     }
   },
@@ -3670,8 +3667,8 @@ module.exports = {
     ignore_elements: ['.notranslate'],
     nodes: {
       ignored:    [],
-      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "code", "ruby"],
-      inline:     ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var"],
+      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "ruby"],
+      inline:     ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code"],
       short:      ["i", "b"],
       splitters:  ["br", "hr"]
     },
