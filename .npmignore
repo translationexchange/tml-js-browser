@@ -3,7 +3,6 @@ test/
 .travis.yml
 .gitignore
 .jshintrc
-Gruntfile.js
 Jakefile.js
 coverage/
 samples/
