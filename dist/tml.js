@@ -5231,25 +5231,22 @@ ApiClient.prototype = {
   },
 
   /**
-   * Gets the latest release version from the API
+   * Gets the latest release version from the CDN
    * @param callback
    */
   getReleaseVersion: function (callback) {
     var self = this;
 
-    // fetch the current version from the server and set it in the cache
-    var url = self.application.getHost() + API_PATH + 'projects/current/version';
-    logger.log("fetching release version: " + url);
+    var url = CDN_URL + "/" + this.application.key + "/version.json";
+    //logger.log("fetching release version: " + url);
 
-    self.adapter.get(url, {access_token: self.application.token}, function (error, response, data) {
-      logger.debug("Fetched release version: " + data);
-
-      if (error || !data) {
+    self.adapter.get(url, {}, function (error, response, data) {
+      if (response.status == 403 || error || !data) {
         callback('0');
         return;
       }
 
-      callback(data);
+      callback(data.version);
     });
   },
 
@@ -5268,7 +5265,7 @@ ApiClient.prototype = {
   },
 
   /**
-   * Checks cache first, if the release is undefined, get it and update cache
+   * Checks local cache first, if the release is undefined, get it and update cache
    * @param callback
    */
   fetchReleaseVersion: function (callback) {
@@ -5283,7 +5280,7 @@ ApiClient.prototype = {
     var self = this;
     this.cache.fetchVersion(function (current_version) {
       // if version is defined in the cache use it.
-      if (!current_version || current_version == 'undefined') {
+      if (!current_version || current_version === 'undefined') {
         self.updateReleaseVersion(function (new_version) {
           callback(new_version);
         });
@@ -5635,9 +5632,13 @@ Application.prototype = {
     self.current_translator = options.current_translator;
     self.current_source = options.current_source;
 
+    if (utils.isFunction(self.current_source)) {
+      self.current_source = self.current_source();
+    }
+    
     self.getApiClient().get("projects/current/definition", {
       locale: options.current_locale || (options.accepted_locales ? options.accepted_locales.join(',') : 'en'),
-      source: options.current_source,
+      source: self.current_source,
       ignored: true
     }, {
         cache_key: 'application'
@@ -7560,6 +7561,24 @@ var Logger = {
 
   debug: function(msg, object) {
     this.log(msg, object);
+  },
+
+  enableConsoleLog: function () {
+    if (typeof(window) === 'undefined')
+      return;
+
+    if(this.oldConsoleLog == null)
+      return;
+
+    window['console']['log'] = this.oldConsoleLog;
+  },
+
+  disableConsoleLog: function () {
+    if (typeof(window) === 'undefined')
+      return;
+
+    this.oldConsoleLog = console.log;
+    window['console']['log'] = function() {};
   }
 
 };
