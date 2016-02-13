@@ -960,12 +960,12 @@ module.exports = {
               css: tml.app.css,
               languages: tml.app.languages
             }, function () {
+              if (typeof(options.onLoad) == "function") {
+                options.onLoad(tml.app);
+              }
+              tml.emit('load');
               if (callback) callback();
             });
-
-            if (typeof(options.onLoad) == "function") {
-              options.onLoad(tml.app);
-            }
           });
 
           // if version is hardcoded - don't bother checking the version
@@ -5243,10 +5243,14 @@ ApiClient.prototype = {
     self.adapter.get(url, {}, function (error, response, data) {
       if (response.status == 403 || error || !data) {
         callback('0');
-        return;
+      } else {
+        try {
+          data = JSON.parse(data);
+          callback(data.version);
+        } catch (err) {
+          callback('0');
+        }
       }
-
-      callback(data.version);
     });
   },
 
@@ -5505,7 +5509,9 @@ Application.prototype = {
    * @param {string} locale - locale for which to get a language
    */
   getLanguage: function(locale) {
-    return this.languages_by_locale[locale];
+    var lang = this.languages_by_locale[locale];
+    if (lang) lang.application = this;
+    return lang;
   },
 
   /**
@@ -5549,7 +5555,9 @@ Application.prototype = {
    */
   getDefaultLanguage: function() {
     var language = this.getLanguage(this.default_locale);
-    return language || new Language(config.getDefaultLanguage());
+    language = language || new Language(config.getDefaultLanguage());
+    language.application = this;
+    return language;
   },
 
   /**
@@ -5635,7 +5643,7 @@ Application.prototype = {
     if (utils.isFunction(self.current_source)) {
       self.current_source = self.current_source();
     }
-    
+
     self.getApiClient().get("projects/current/definition", {
       locale: options.current_locale || (options.accepted_locales ? options.accepted_locales.join(',') : 'en'),
       source: self.current_source,
@@ -5892,7 +5900,7 @@ Application.prototype = {
   },
 
   registerMissingTranslationKey: function(source_key, translation_key) {
-    //console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
+    console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
 
     this.addMissingElement(source_key, translation_key);
 
@@ -7045,8 +7053,6 @@ Language.prototype = {
         var local_key = this.application.getTranslationKey(translation_key.key);
         if (local_key) translation_key = local_key;
       }
-
-
     }
 
     return translation_key.translate(this, params.tokens, params.options);
@@ -7561,24 +7567,6 @@ var Logger = {
 
   debug: function(msg, object) {
     this.log(msg, object);
-  },
-
-  enableConsoleLog: function () {
-    if (typeof(window) === 'undefined')
-      return;
-
-    if(this.oldConsoleLog == null)
-      return;
-
-    window['console']['log'] = this.oldConsoleLog;
-  },
-
-  disableConsoleLog: function () {
-    if (typeof(window) === 'undefined')
-      return;
-
-    this.oldConsoleLog = console.log;
-    window['console']['log'] = function() {};
   }
 
 };
