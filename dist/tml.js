@@ -86,7 +86,8 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
       xhr = new XMLHttpRequest();
 
     if (method.match(/^get$/i)) {
-      url = url + "?" + this.serialize(params || {});
+      var query = this.serialize(params || {});
+      if (query !== '') url = url + "?" + query;
       data = null;
     } else {
       data = this.serialize(params || {});
@@ -303,7 +304,8 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
   clear: function(callback) {
     for (var key in this.cache){
       if (key.match(/^tml_/))
-        this.cache.removeItem(key);
+        if (!key.match(/current_version/))
+          this.cache.removeItem(key);
     }
     if (callback) callback(null);
   }
@@ -511,6 +513,21 @@ var helpers = {
     );
   },
 
+  includeLs: function(options) {
+    var node = document.createElement("div");
+    if (utils.isObject(options)) {
+      for(var propertyName in options) {
+        if (propertyName == 'type')
+          node.setAttribute("data-tml-language-selector", options[propertyName]);
+        else
+          node.setAttribute("data-tml-" + propertyName, options[propertyName]);
+      }
+    } else {
+      node.setAttribute("data-tml-language-selector", "sideflags");
+    }
+    document.body.appendChild(node);
+  },
+
   includeAgent: function(app, options, callback) {
     var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
@@ -616,6 +633,7 @@ module.exports = {
   updateCurrentLocale:  helpers.updateCurrentLocale,
   getCookie:            helpers.getCookie,
   setCookie:            helpers.setCookie,
+  includeLs:            helpers.includeLs,
   includeAgent:         helpers.includeAgent
 };
 },{"tml-js":34}],5:[function(require,module,exports){
@@ -919,7 +937,8 @@ module.exports = {
           cache: {
             enabled: true,
             adapter: "browser",
-            version: cache_version
+            version: cache_version,
+            version_check_interval: options.version_check_interval || 60 // browser will default to every 60 sec
           }
         }, options);
 
@@ -955,6 +974,10 @@ module.exports = {
 
             if (!options.agent) options.agent = {};
 
+            if (options.language_selector) {
+              helpers.includeLs(options.language_selector);
+            }
+
             helpers.includeAgent(tml.app, {
               host: options.agent.host,
               cache: options.agent.cache || 864000000,
@@ -969,17 +992,6 @@ module.exports = {
                 options.onLoad(tml.app);
               }
               tml.emit('load');
-              // if version is hardcoded - don't bother checking the version
-              if (options.fetch_version) {
-                setTimeout(function () {
-                  tml.config.getCache().fetchVersion(function (current_version) {
-                    tml.app.getApiClient().getReleaseVersion(function (new_version) {
-                      if (current_version != new_version)
-                        tml.config.getCache().clear();
-                    });
-                  });
-                }, 1000);
-              }
               if (callback) callback();
             });
           });
@@ -5266,39 +5278,63 @@ ApiClient.prototype = {
    * Pulls the latest release and update it in the cache
    * @param callback
    */
-  updateReleaseVersion: function (callback) {
+  updateReleaseVersion: function (current_version, callback) {
     var self = this;
     self.getReleaseVersion(function (new_version) {
       self.cache.storeVersion(new_version, function (updated_version) {
-        logger.log("Caching release version as: " + updated_version);
+        if (current_version != updated_version) {
+          logger.debug("Changing version from " + current_version + " to " + updated_version);
+          self.cache.clear();
+        }
         callback(updated_version);
       });
     });
   },
 
   /**
-   * Checks local cache first, if the release is undefined, get it and update cache
+   * Checks local cache first, if the release is undefined, get it and update the local cache
    * @param callback
    */
-  fetchReleaseVersion: function (callback) {
-    // we only need to do this once per adapter
-    // so if there are multiple API calls from a single adapter,
-    // we only do the version check once
+  getCacheVersion: function (callback) {
+    // check version in the memory cache first
     if (this.cache.version && this.cache.version != 'undefined') {
       callback(this.cache.version);
       return;
     }
 
     var self = this;
-    this.cache.fetchVersion(function (current_version) {
-      // if version is defined in the cache use it.
-      if (!current_version || current_version === 'undefined') {
-        self.updateReleaseVersion(function (new_version) {
+
+    // get version from local cache
+    this.cache.fetchVersion(function (version_data) {
+
+      // check timestamp for the version
+      var needs_version_check = false;
+      if (version_data.t) {
+        var expires_at = version_data.t + self.cache.getVersionCheckInterval();
+        var now = new Date().getTime();
+        if (expires_at < now) {
+          logger.debug("Cache version is outdated and needs a refresh now");
+          needs_version_check = true;
+        } else {
+          var delta = Math.round((expires_at - now) / 1000);
+          logger.debug("Cache version is up to date, will be checked in: " + delta + "s");
+        }
+      } else {
+        logger.debug("Cache version has no timestamp, needs a refresh");
+        needs_version_check = true;
+      }
+
+      //logger.debug(version_data);
+
+      if (needs_version_check) {
+        // update local cache version from CDN
+        self.updateReleaseVersion(version_data.version, function (new_version) {
           callback(new_version);
         });
       } else {
-        self.cache.setVersion(current_version);
-        callback(current_version);
+        // if version is defined in the cache use it.
+        self.cache.setVersion(version_data.version);
+        callback(version_data.version);
       }
     });
   },
@@ -5403,7 +5439,7 @@ ApiClient.prototype = {
       return;
     }
 
-    self.fetchReleaseVersion(function (version) {
+    self.getCacheVersion(function (version) {
       if (parseInt(version) === 0) {
         request_callback('No release has been published');
       } else {
@@ -6106,8 +6142,8 @@ module.exports = Application;
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-var utils       = require("./utils");
-var BaseAdapter = require('./cache_adapters/base');
+var utils        = require("./utils");
+var BaseAdapter  = require('./cache_adapters/base');
 
 var Cache = function(options) {
   this.adapter = null;
@@ -6127,6 +6163,8 @@ var Cache = function(options) {
     if (adapter_class) {
       adapter_class.prototype = utils.extend(new BaseAdapter(), adapter_class.prototype);
       this.adapter = new adapter_class(options);
+      if (options.version_check_interval)
+        this.adapter.version_check_interval = options.version_check_interval;
     }
   }
 
@@ -6207,7 +6245,7 @@ Cache.prototype = {
    */
   fetchVersion: function(callback) {
     if (!this.adapter) {
-      callback(this.options.version || '0');
+      callback({version: this.options.version || '0'});
       return;
     }
     this.adapter.fetchVersion(callback);
@@ -6246,6 +6284,16 @@ Cache.prototype = {
   resetVersion: function() {
     if (!this.adapter) return;
     this.version = null;
+  },
+
+  /**
+   * Returns version check interval
+   *
+   * @returns {number}
+   */
+  getVersionCheckInterval: function() {
+    if (!this.adapter) return 0;
+    return this.adapter.version_check_interval * 1000;
   },
 
   /**
@@ -6320,6 +6368,9 @@ Base.prototype = {
   cached_by_source  : true,
   name              : "",
 
+  // check for version every hour - store number in seconds
+  version_check_interval: (60 * 60),
+
   initialize: function(config) {
     this.config = config || {};
     this.cache = this.create();
@@ -6382,20 +6433,47 @@ Base.prototype = {
       self.info("Cache version from config: " + self.config.version);
       callback(self.config.version);
     } else {
-      self.fetch(VERSION_KEY, "undefined", function (err, data) {
-        self.info("Cache version: " + data);
+      var default_version = JSON.stringify({version: "undefined"});
+      self.fetch(VERSION_KEY, default_version, function (err, data) {
+        data = data || '';
+        if (data.indexOf('{') != -1)
+          data = JSON.parse(data);
+        else
+          data = {version: data};
+        self.info("Cache version: " + data.version);
         callback(data);
       });
     }
   },
 
   storeVersion: function(version, callback) {
-    this.version = version;
-    this.store(VERSION_KEY, this.version, function() {
-      if (callback) callback(this.version);
-    }.bind(this));
+    var self = this;
+    self.version = version;
+
+    // store version with a timestamp when it was last updated
+    var version_data = JSON.stringify({version: self.version, t: self.getVersionTimestamp()});
+    //logger.debug("Storing version data " + version_data);
+
+    self.store(VERSION_KEY, version_data, function() {
+      if (callback) callback(self.version);
+    });
   },
 
+  /**
+   * Returns timestamp based on the frequency interval
+   */
+  getVersionTimestamp: function() {
+    var t = new Date().getTime();
+    //t = t - (t % (this.version_check_interval * 1000));
+    return t;
+  },
+
+  /**
+   * Prefix key with a version
+   *
+   * @param key
+   * @returns {string}
+   */
   getVersionedKey: function(key) {
     var parts = [
       KEY_PREFIX,
@@ -6406,6 +6484,12 @@ Base.prototype = {
     return parts.join('_');
   },
 
+  /**
+   * Remove extensions from data before putting it in cache
+   *
+   * @param data
+   * @returns {*}
+   */
   stripExtensions: function(data) {
     if (utils.isString(data) && data.match(/^\{/)) {
       data = JSON.parse(data);
@@ -6416,6 +6500,11 @@ Base.prototype = {
     return data;
   },
 
+  /**
+   * Get the API request object based on implementation
+   *
+   * @returns {null}
+   */
   getRequest: function() {
     // must be overloaded by cache adapters
     return null;
