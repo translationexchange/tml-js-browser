@@ -819,7 +819,9 @@ module.exports = {
 
         tml.initApplication(options, function () {
           tml.startKeyListener();
+
           tml.startSourceListener(options);
+
           if (callback) {
             callback();
           }
@@ -863,6 +865,9 @@ module.exports = {
 
       //  keep track of route changes and update source
       startSourceListener: function (options) {
+        // TODO: Ian, we don't need this unless we use a fully automated mode
+        if (!options.translateBody) return;
+
         var self = this;
         var app = tml.getApplication();
 
@@ -925,7 +930,7 @@ module.exports = {
 
         tml.app = new tml.Application({
           key: options.key,
-          token: options.token,
+          token: cookie.oauth ? cookie.oauth.token : null,
           host: options.host || DEFAULT_HOST
         });
 
@@ -964,21 +969,20 @@ module.exports = {
                 options.onLoad(tml.app);
               }
               tml.emit('load');
+              // if version is hardcoded - don't bother checking the version
+              if (options.fetch_version) {
+                setTimeout(function () {
+                  tml.config.getCache().fetchVersion(function (current_version) {
+                    tml.app.getApiClient().getReleaseVersion(function (new_version) {
+                      if (current_version != new_version)
+                        tml.config.getCache().clear();
+                    });
+                  });
+                }, 1000);
+              }
               if (callback) callback();
             });
           });
-
-          // if version is hardcoded - don't bother checking the version
-          if (options.fetch_version) {
-            setTimeout(function () {
-              tml.config.getCache().fetchVersion(function (current_version) {
-                tml.app.getApiClient().getReleaseVersion(function (new_version) {
-                  if (current_version != new_version)
-                    tml.config.getCache().clear();
-                });
-              });
-            }, 1000);
-          }
         });
       },
 
@@ -5236,11 +5240,15 @@ ApiClient.prototype = {
    */
   getReleaseVersion: function (callback) {
     var self = this;
+    var version_cache = 60 * 5 * 1000;
+
+    var t = new Date().getTime();
+    t = t - (t % version_cache);
 
     var url = CDN_URL + "/" + this.application.key + "/version.json";
     //logger.log("fetching release version: " + url);
 
-    self.adapter.get(url, {}, function (error, response, data) {
+    self.adapter.get(url, {t: t}, function (error, response, data) {
       if (response.status == 403 || error || !data) {
         callback('0');
       } else {
@@ -5349,6 +5357,16 @@ ApiClient.prototype = {
     this.api(opts.path, opts.params, opts.options, opts.callback);
   },
 
+  isLiveApiRequest: function() {
+    if (!this.application.token) return false;
+    return this.application.isInlineModeEnabled();
+  },
+
+  isCacheEnabled: function(options) {
+    if (options.method == "post") return false;
+    return options.cache_key && this.cache;
+  },
+
   /**
    * Internal - should never be used directly
    *
@@ -5371,33 +5389,39 @@ ApiClient.prototype = {
       }
     };
 
-    var should_use_cache = (!this.application.isInlineModeEnabled() && options.cache_key && this.cache);
-
-    if (options.method == "post") {
-      self.adapter.post(url, params, request_callback);
-    } else if (should_use_cache) {
-      self.fetchReleaseVersion(function (version) {
-        if (parseInt(version) === 0) {
-          request_callback('No release has been published');
-        } else {
-          self.cache.fetch(options.cache_key, function (cache_callback) {
-            self.fetchFromCdn(options.cache_key, cache_callback);
-          }, function (error, data) {
-            if (!error && data) {
-              try {
-                data = JSON.parse(data);
-              } catch (e) {
-                return callback(e);
-              }
-              callback(null, data);
-            } else
-              callback(error);
-          });
-        }
-      });
-    } else {
-      self.adapter.get(url, params, request_callback);
+    if (self.isLiveApiRequest()) {
+      if (options.method == "post") {
+        self.adapter.post(url, params, request_callback);
+      } else {
+        self.adapter.get(url, params, request_callback);
+      }
+      return;
     }
+
+    if (!self.isCacheEnabled(options)) {
+      request_callback('Cache is disabled');
+      return;
+    }
+
+    self.fetchReleaseVersion(function (version) {
+      if (parseInt(version) === 0) {
+        request_callback('No release has been published');
+      } else {
+        self.cache.fetch(options.cache_key, function (cache_callback) {
+          self.fetchFromCdn(options.cache_key, cache_callback);
+        }, function (error, data) {
+          if (!error && data) {
+            try {
+              data = JSON.parse(data);
+            } catch (e) {
+              return callback(e);
+            }
+            callback(null, data);
+          } else
+            callback(error);
+        });
+      }
+    });
   }
 
 };
@@ -5644,7 +5668,7 @@ Application.prototype = {
       self.current_source = self.current_source();
     }
 
-    self.getApiClient().get("projects/current/definition", {
+    self.getApiClient().get("projects/" + self.key + "/definition", {
       locale: options.current_locale || (options.accepted_locales ? options.accepted_locales.join(',') : 'en'),
       source: self.current_source,
       ignored: true
@@ -5671,14 +5695,35 @@ Application.prototype = {
         self.default_locale
       );
 
+      if (!self.isSupportedLocale(self.current_locale)) {
+        self.current_locale = self.default_locale;
+      }
+
       var locales = [self.default_locale];
       if (self.current_locale != self.default_locale) {
         locales.push(self.current_locale);
       }
 
+      //console.log("Current locale: ", self.current_locale);
+
       var sources = [self.current_source || 'index'];
       self.initData(locales, sources, callback);
     });
+  },
+
+  /**
+   * Checks if the locale is part of the application
+   *
+   * @param locale
+   * @returns {boolean}
+   */
+  isSupportedLocale: function(locale) {
+    if (!this.languages) return false;
+    for(var i=0; i<this.languages.length; i++) {
+      if (this.languages[i].locale == locale)
+        return true;
+    }
+    return false;
   },
 
   /**
@@ -5772,7 +5817,7 @@ Application.prototype = {
     locales.forEach(function(locale) {
       if (!self.languages_by_locale[locale]) {
         data[locale] = function (callback) {
-          self.getApiClient().get("languages/" + locale, {definition: true}, {cache_key: self.getLanguageKey(locale)}, function (error, data) {
+          self.getApiClient().get("languages/" + locale + "/definition", {}, {cache_key: self.getLanguageKey(locale)}, function (error, data) {
             if (error) {
               callback(error, null);
               return;
@@ -5841,9 +5886,9 @@ Application.prototype = {
           var key = utils.generateSourceKey(source);
           self.getApiClient().get("sources/" + key + '/translations', {
             locale: locale,
-            sources: true,
             ignored: true,
-            per_page: 100000
+            all: true,
+            app_id: self.key
           }, {
             cache_key: locale + '/sources' + utils.normalizePath(source)
           }, function(error, data) {
@@ -5900,7 +5945,7 @@ Application.prototype = {
   },
 
   registerMissingTranslationKey: function(source_key, translation_key) {
-    console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
+    //console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
 
     this.addMissingElement(source_key, translation_key);
 
@@ -5964,7 +6009,7 @@ Application.prototype = {
     var self = this;
     self.missing_keys_by_source = null;
 
-    this.getApiClient().post("sources/register_keys", {source_keys: JSON.stringify(params)}, function () {
+    this.getApiClient().post("sources/register_keys", {source_keys: JSON.stringify(params), app_id: self.key}, function () {
       utils.keys(self.languages_by_locale).forEach(function (locale) {
         source_keys.forEach(function (source_key) {
           // delete from cache source_key + locale
@@ -7073,7 +7118,11 @@ Language.prototype = {
   },
 
   getSourceName: function(source) {
-    return source.call && source() || source;
+    var source_name = source.call && source() || source;
+    // limit source name to no more than 60 characters
+    if (source_name && source_name.length > 60)
+      source_name = source_name.substring(0, 60);
+    return source_name;
   },
 
   getSourcePath: function(options) {
@@ -10435,7 +10484,7 @@ module.exports = {
     var k,i,l=0,c=0,r={},e = null;
     var cb = function(k){
       funcs[k](function(err, data){
-        if(err) callback(err);
+        if(err) return callback(err);
         if(data) r[k] = data;
         c++;
         if(c == l) {
