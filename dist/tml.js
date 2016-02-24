@@ -5252,13 +5252,9 @@ ApiClient.prototype = {
    */
   getReleaseVersion: function (callback) {
     var self = this;
-    var version_cache = 60 * 5 * 1000;
-
     var t = new Date().getTime();
-    t = t - (t % version_cache);
 
     var url = CDN_URL + "/" + this.application.key + "/version.json";
-    //logger.log("fetching release version: " + url);
 
     self.adapter.get(url, {t: t}, function (error, response, data) {
       if (response.status == 403 || error || !data) {
