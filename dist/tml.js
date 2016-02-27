@@ -86,7 +86,8 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
       xhr = new XMLHttpRequest();
 
     if (method.match(/^get$/i)) {
-      url = url + "?" + this.serialize(params || {});
+      var query = this.serialize(params || {});
+      if (query !== '') url = url + "?" + query;
       data = null;
     } else {
       data = this.serialize(params || {});
@@ -303,7 +304,8 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
   clear: function(callback) {
     for (var key in this.cache){
       if (key.match(/^tml_/))
-        this.cache.removeItem(key);
+        if (!key.match(/current_version/))
+          this.cache.removeItem(key);
     }
     if (callback) callback(null);
   }
@@ -511,6 +513,21 @@ var helpers = {
     );
   },
 
+  includeLs: function(options) {
+    var node = document.createElement("div");
+    if (utils.isObject(options)) {
+      for(var propertyName in options) {
+        if (propertyName == 'type')
+          node.setAttribute("data-tml-language-selector", options[propertyName]);
+        else
+          node.setAttribute("data-tml-" + propertyName, options[propertyName]);
+      }
+    } else {
+      node.setAttribute("data-tml-language-selector", "sideflags");
+    }
+    document.body.appendChild(node);
+  },
+
   includeAgent: function(app, options, callback) {
     var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
@@ -616,6 +633,7 @@ module.exports = {
   updateCurrentLocale:  helpers.updateCurrentLocale,
   getCookie:            helpers.getCookie,
   setCookie:            helpers.setCookie,
+  includeLs:            helpers.includeLs,
   includeAgent:         helpers.includeAgent
 };
 },{"tml-js":34}],5:[function(require,module,exports){
@@ -781,7 +799,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '/* @echo VERSION */',
+      version: '0.4.31',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -918,7 +936,8 @@ module.exports = {
           cache: {
             enabled: true,
             adapter: "browser",
-            version: cache_version
+            version: cache_version,
+            version_check_interval: options.version_check_interval || 60 // browser will default to every 60 sec
           }
         }, options);
 
@@ -929,7 +948,7 @@ module.exports = {
 
         tml.app = new tml.Application({
           key: options.key,
-          token: options.token,
+          token: cookie.oauth ? cookie.oauth.token : null,
           host: options.host || DEFAULT_HOST
         });
 
@@ -954,6 +973,10 @@ module.exports = {
 
             if (!options.agent) options.agent = {};
 
+            if (options.language_selector) {
+              helpers.includeLs(options.language_selector);
+            }
+
             helpers.includeAgent(tml.app, {
               host: options.agent.host,
               cache: options.agent.cache || 864000000,
@@ -968,17 +991,6 @@ module.exports = {
                 options.onLoad(tml.app);
               }
               tml.emit('load');
-              // if version is hardcoded - don't bother checking the version
-              if (options.fetch_version) {
-                setTimeout(function () {
-                  tml.config.getCache().fetchVersion(function (current_version) {
-                    tml.app.getApiClient().getReleaseVersion(function (new_version) {
-                      if (current_version != new_version)
-                        tml.config.getCache().clear();
-                    });
-                  });
-                }, 1000);
-              }
               if (callback) callback();
             });
           });
