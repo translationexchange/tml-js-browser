@@ -619,8 +619,7 @@ module.exports = {
   includeAgent:         helpers.includeAgent
 };
 },{"tml-js":34}],5:[function(require,module,exports){
-
-var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code"];
+var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code", "kbd"];
 var separators  = ["br", "hr"];
 
 module.exports = {
@@ -782,7 +781,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.31',
+      version: '/* @echo VERSION */',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -819,7 +818,9 @@ module.exports = {
 
         tml.initApplication(options, function () {
           tml.startKeyListener();
+
           tml.startSourceListener(options);
+
           if (callback) {
             callback();
           }
@@ -863,6 +864,9 @@ module.exports = {
 
       //  keep track of route changes and update source
       startSourceListener: function (options) {
+        // TODO: Ian, we don't need this unless we use a fully automated mode
+        if (!options.translateBody) return;
+
         var self = this;
         var app = tml.getApplication();
 
@@ -964,21 +968,20 @@ module.exports = {
                 options.onLoad(tml.app);
               }
               tml.emit('load');
+              // if version is hardcoded - don't bother checking the version
+              if (options.fetch_version) {
+                setTimeout(function () {
+                  tml.config.getCache().fetchVersion(function (current_version) {
+                    tml.app.getApiClient().getReleaseVersion(function (new_version) {
+                      if (current_version != new_version)
+                        tml.config.getCache().clear();
+                    });
+                  });
+                }, 1000);
+              }
               if (callback) callback();
             });
           });
-
-          // if version is hardcoded - don't bother checking the version
-          if (options.fetch_version) {
-            setTimeout(function () {
-              tml.config.getCache().fetchVersion(function (current_version) {
-                tml.app.getApiClient().getReleaseVersion(function (new_version) {
-                  if (current_version != new_version)
-                    tml.config.getCache().clear();
-                });
-              });
-            }, 1000);
-          }
         });
       },
 
@@ -1306,6 +1309,7 @@ var utils       = tml.utils;
 var dom         = require('../helpers/dom-helpers');
 
 
+
 var DomTokenizer = function(doc, context, options) {
   this.doc = doc;
   this.context = context || {};
@@ -1344,8 +1348,9 @@ DomTokenizer.prototype = {
     var parent = nodes[0] && nodes[0].parentNode;
     var container;
     var tml, data, translation, text = "";
+
     if(parent) {
-      tml         = nodes.map(function(n){text+=n.innerText||n.nodeValue;return this.generateTmlTags(n);}.bind(this)).join("");
+      tml         = nodes.map(function(n){text+=n.innerHTML || n.nodeValue;return this.generateTmlTags(n);}.bind(this)).join("");
       data        = this.tokens;
       translation = this.translateTml(tml);
 
@@ -1470,10 +1475,12 @@ DomTokenizer.prototype = {
 
 
   generateTmlTags: function(node) {
-    if(node.nodeType == 3) { return node.nodeValue; }
+    if(node.nodeType == 3) { 
+      return this.escapeHtml(node.nodeValue); 
+    }
 
     if (!this.isTranslatable(node)) {
-      var tokenName = this.contextualize(this.adjustName(node), node.innerHTML);
+      var tokenName = this.contextualize(this.adjustName(node), node.outerHTML);
       return "{" + tokenName + "}";
     }
 
@@ -1486,7 +1493,7 @@ DomTokenizer.prototype = {
 
     for(var i=0; i<node.childNodes.length; i++) {
       var child = node.childNodes[i];
-      buffer = buffer + ((child.nodeType == 3) ? child.nodeValue : this.generateTmlTags(child));
+      buffer = buffer + ((child.nodeType == 3) ? this.escapeHtml(child.nodeValue) : this.generateTmlTags(child));
     }
     var tokenContext = this.generateHtmlToken(node);
     var token = this.contextualize(this.adjustName(node), tokenContext);
@@ -1675,6 +1682,11 @@ DomTokenizer.prototype = {
     return value.replace(/^\s+/,'');
   },
 
+  escapeHtml: function(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  },
 
 
 
@@ -1709,12 +1721,14 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
+(function (global){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
+/* eslint-disable no-proto */
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
@@ -1754,20 +1768,22 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = (function () {
-  function Bar () {}
-  try {
-    var arr = new Uint8Array(1)
-    arr.foo = function () { return 42 }
-    arr.constructor = Bar
-    return arr.foo() === 42 && // typed array instances can be augmented
-        arr.constructor === Bar && // constructor can be set
-        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
-        arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
-  } catch (e) {
-    return false
-  }
-})()
+Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
+  ? global.TYPED_ARRAY_SUPPORT
+  : (function () {
+      function Bar () {}
+      try {
+        var arr = new Uint8Array(1)
+        arr.foo = function () { return 42 }
+        arr.constructor = Bar
+        return arr.foo() === 42 && // typed array instances can be augmented
+            arr.constructor === Bar && // constructor can be set
+            typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+            arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+      } catch (e) {
+        return false
+      }
+    })()
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -1923,10 +1939,16 @@ function fromJsonObject (that, object) {
   return that
 }
 
+if (Buffer.TYPED_ARRAY_SUPPORT) {
+  Buffer.prototype.__proto__ = Uint8Array.prototype
+  Buffer.__proto__ = Uint8Array
+}
+
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
+    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -3243,6 +3265,7 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -3618,8 +3641,7 @@ module.exports = {
         span   :  "<span id='{$id}' class='{$class}' style='{$style}'>{$0}</span>",
         h1     :  "<h1>{$0}</h1>",
         h2     :  "<h2>{$0}</h2>",
-        h3     :  "<h3>{$0}</h3>",
-        code   :  "<code>{$0}</code>"
+        h3     :  "<h3>{$0}</h3>"
       }
     },
     text : {
@@ -3657,8 +3679,7 @@ module.exports = {
         span   :  "{$0}",
         h1     :  "{$0}",
         h2     :  "{$0}",
-        h3     :  "{$0}",
-        code   :  "{$0}"
+        h3     :  "{$0}"
       }
     }
   },
@@ -3672,7 +3693,7 @@ module.exports = {
     ignore_elements: ['.notranslate'],
     nodes: {
       ignored:    [],
-      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "ruby"],
+      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "ruby", "pre"],
       inline:     ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code"],
       short:      ["i", "b"],
       splitters:  ["br", "hr"]
@@ -5231,26 +5252,25 @@ ApiClient.prototype = {
   },
 
   /**
-   * Gets the latest release version from the CDN
+   * Gets the latest release version from the API
    * @param callback
    */
   getReleaseVersion: function (callback) {
     var self = this;
 
-    var url = CDN_URL + "/" + this.application.key + "/version.json";
-    //logger.log("fetching release version: " + url);
+    // fetch the current version from the server and set it in the cache
+    var url = self.application.getHost() + API_PATH + 'projects/current/version';
+    logger.log("fetching release version: " + url);
 
-    self.adapter.get(url, {}, function (error, response, data) {
-      if (response.status == 403 || error || !data) {
+    self.adapter.get(url, {access_token: self.application.token}, function (error, response, data) {
+      logger.debug("Fetched release version: " + data);
+
+      if (error || !data) {
         callback('0');
-      } else {
-        try {
-          data = JSON.parse(data);
-          callback(data.version);
-        } catch (err) {
-          callback('0');
-        }
+        return;
       }
+
+      callback(data);
     });
   },
 
@@ -5269,7 +5289,7 @@ ApiClient.prototype = {
   },
 
   /**
-   * Checks local cache first, if the release is undefined, get it and update cache
+   * Checks cache first, if the release is undefined, get it and update cache
    * @param callback
    */
   fetchReleaseVersion: function (callback) {
@@ -5284,7 +5304,7 @@ ApiClient.prototype = {
     var self = this;
     this.cache.fetchVersion(function (current_version) {
       // if version is defined in the cache use it.
-      if (!current_version || current_version === 'undefined') {
+      if (!current_version || current_version == 'undefined') {
         self.updateReleaseVersion(function (new_version) {
           callback(new_version);
         });
@@ -5509,9 +5529,7 @@ Application.prototype = {
    * @param {string} locale - locale for which to get a language
    */
   getLanguage: function(locale) {
-    var lang = this.languages_by_locale[locale];
-    if (lang) lang.application = this;
-    return lang;
+    return this.languages_by_locale[locale];
   },
 
   /**
@@ -5555,9 +5573,7 @@ Application.prototype = {
    */
   getDefaultLanguage: function() {
     var language = this.getLanguage(this.default_locale);
-    language = language || new Language(config.getDefaultLanguage());
-    language.application = this;
-    return language;
+    return language || new Language(config.getDefaultLanguage());
   },
 
   /**
@@ -5640,13 +5656,9 @@ Application.prototype = {
     self.current_translator = options.current_translator;
     self.current_source = options.current_source;
 
-    if (utils.isFunction(self.current_source)) {
-      self.current_source = self.current_source();
-    }
-
     self.getApiClient().get("projects/current/definition", {
       locale: options.current_locale || (options.accepted_locales ? options.accepted_locales.join(',') : 'en'),
-      source: self.current_source,
+      source: options.current_source,
       ignored: true
     }, {
         cache_key: 'application'
@@ -5900,7 +5912,7 @@ Application.prototype = {
   },
 
   registerMissingTranslationKey: function(source_key, translation_key) {
-    console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
+    //console.log("Registering missing translation key: " + source_key + " " + translation_key.label);
 
     this.addMissingElement(source_key, translation_key);
 
@@ -7053,6 +7065,8 @@ Language.prototype = {
         var local_key = this.application.getTranslationKey(translation_key.key);
         if (local_key) translation_key = local_key;
       }
+
+
     }
 
     return translation_key.translate(this, params.tokens, params.options);
