@@ -5116,7 +5116,7 @@ module.exports = {
 };
 },{}],16:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -5186,7 +5186,7 @@ Base.prototype = {
 module.exports = Base;
 },{}],17:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -5264,25 +5264,26 @@ ApiClient.prototype = {
   },
 
   /**
-   * Gets the latest release version from the API
+   * Gets the latest release version from the CDN
    * @param callback
    */
   getReleaseVersion: function (callback) {
     var self = this;
+    var t = new Date().getTime();
 
-    // fetch the current version from the server and set it in the cache
-    var url = self.application.getHost() + API_PATH + 'projects/current/version';
-    logger.log("fetching release version: " + url);
+    var url = CDN_URL + "/" + this.application.key + "/version.json";
 
-    self.adapter.get(url, {access_token: self.application.token}, function (error, response, data) {
-      logger.debug("Fetched release version: " + data);
-
-      if (error || !data) {
+    self.adapter.get(url, {t: t}, function (error, response, data) {
+      if (response.status == 403 || error || !data) {
         callback('0');
-        return;
+      } else {
+        try {
+          data = JSON.parse(data);
+          callback(data.version);
+        } catch (err) {
+          callback('0');
+        }
       }
-
-      callback(data);
     });
   },
 
@@ -5290,39 +5291,63 @@ ApiClient.prototype = {
    * Pulls the latest release and update it in the cache
    * @param callback
    */
-  updateReleaseVersion: function (callback) {
+  updateReleaseVersion: function (current_version, callback) {
     var self = this;
     self.getReleaseVersion(function (new_version) {
       self.cache.storeVersion(new_version, function (updated_version) {
-        logger.log("Caching release version as: " + updated_version);
+        if (current_version != updated_version) {
+          logger.debug("Changing version from " + current_version + " to " + updated_version);
+          self.cache.clear();
+        }
         callback(updated_version);
       });
     });
   },
 
   /**
-   * Checks cache first, if the release is undefined, get it and update cache
+   * Checks local cache first, if the release is undefined, get it and update the local cache
    * @param callback
    */
-  fetchReleaseVersion: function (callback) {
-    // we only need to do this once per adapter
-    // so if there are multiple API calls from a single adapter,
-    // we only do the version check once
+  getCacheVersion: function (callback) {
+    // check version in the memory cache first
     if (this.cache.version && this.cache.version != 'undefined') {
       callback(this.cache.version);
       return;
     }
 
     var self = this;
-    this.cache.fetchVersion(function (current_version) {
-      // if version is defined in the cache use it.
-      if (!current_version || current_version == 'undefined') {
-        self.updateReleaseVersion(function (new_version) {
+
+    // get version from local cache
+    this.cache.fetchVersion(function (version_data) {
+
+      // check timestamp for the version
+      var needs_version_check = false;
+      if (version_data.t) {
+        var expires_at = version_data.t + self.cache.getVersionCheckInterval();
+        var now = new Date().getTime();
+        if (expires_at < now) {
+          logger.debug("Cache version is outdated and needs a refresh now");
+          needs_version_check = true;
+        } else {
+          var delta = Math.round((expires_at - now) / 1000);
+          logger.debug("Cache version is up to date, will be checked in: " + delta + "s");
+        }
+      } else {
+        logger.debug("Cache version has no timestamp, needs a refresh");
+        needs_version_check = true;
+      }
+
+      //logger.debug(version_data);
+
+      if (needs_version_check) {
+        // update local cache version from CDN
+        self.updateReleaseVersion(version_data.version, function (new_version) {
           callback(new_version);
         });
       } else {
-        self.cache.setVersion(current_version);
-        callback(current_version);
+        // if version is defined in the cache use it.
+        self.cache.setVersion(version_data.version);
+        callback(version_data.version);
       }
     });
   },
@@ -5381,6 +5406,16 @@ ApiClient.prototype = {
     this.api(opts.path, opts.params, opts.options, opts.callback);
   },
 
+  isLiveApiRequest: function() {
+    if (!this.application.token) return false;
+    return this.application.isInlineModeEnabled();
+  },
+
+  isCacheEnabled: function(options) {
+    if (options.method == "post") return false;
+    return options.cache_key && this.cache;
+  },
+
   /**
    * Internal - should never be used directly
    *
@@ -5403,33 +5438,39 @@ ApiClient.prototype = {
       }
     };
 
-    var should_use_cache = (!this.application.isInlineModeEnabled() && options.cache_key && this.cache);
-
-    if (options.method == "post") {
-      self.adapter.post(url, params, request_callback);
-    } else if (should_use_cache) {
-      self.fetchReleaseVersion(function (version) {
-        if (parseInt(version) === 0) {
-          request_callback('No release has been published');
-        } else {
-          self.cache.fetch(options.cache_key, function (cache_callback) {
-            self.fetchFromCdn(options.cache_key, cache_callback);
-          }, function (error, data) {
-            if (!error && data) {
-              try {
-                data = JSON.parse(data);
-              } catch (e) {
-                return callback(e);
-              }
-              callback(null, data);
-            } else
-              callback(error);
-          });
-        }
-      });
-    } else {
-      self.adapter.get(url, params, request_callback);
+    if (self.isLiveApiRequest()) {
+      if (options.method == "post") {
+        self.adapter.post(url, params, request_callback);
+      } else {
+        self.adapter.get(url, params, request_callback);
+      }
+      return;
     }
+
+    if (!self.isCacheEnabled(options)) {
+      request_callback('Cache is disabled');
+      return;
+    }
+
+    self.getCacheVersion(function (version) {
+      if (parseInt(version) === 0) {
+        request_callback('No release has been published');
+      } else {
+        self.cache.fetch(options.cache_key, function (cache_callback) {
+          self.fetchFromCdn(options.cache_key, cache_callback);
+        }, function (error, data) {
+          if (!error && data) {
+            try {
+              data = JSON.parse(data);
+            } catch (e) {
+              return callback(e);
+            }
+            callback(null, data);
+          } else
+            callback(error);
+        });
+      }
+    });
   }
 
 };
@@ -5438,7 +5479,7 @@ module.exports = ApiClient;
 
 },{"./api_adapters/base":16,"./configuration":21,"./logger":29,"./utils":44}],18:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -5541,7 +5582,9 @@ Application.prototype = {
    * @param {string} locale - locale for which to get a language
    */
   getLanguage: function(locale) {
-    return this.languages_by_locale[locale];
+    var lang = this.languages_by_locale[locale];
+    if (lang) lang.application = this;
+    return lang;
   },
 
   /**
@@ -5585,7 +5628,9 @@ Application.prototype = {
    */
   getDefaultLanguage: function() {
     var language = this.getLanguage(this.default_locale);
-    return language || new Language(config.getDefaultLanguage());
+    language = language || new Language(config.getDefaultLanguage());
+    language.application = this;
+    return language;
   },
 
   /**
@@ -5668,9 +5713,13 @@ Application.prototype = {
     self.current_translator = options.current_translator;
     self.current_source = options.current_source;
 
-    self.getApiClient().get("projects/current/definition", {
+    if (utils.isFunction(self.current_source)) {
+      self.current_source = self.current_source();
+    }
+
+    self.getApiClient().get("projects/" + self.key + "/definition", {
       locale: options.current_locale || (options.accepted_locales ? options.accepted_locales.join(',') : 'en'),
-      source: options.current_source,
+      source: self.current_source,
       ignored: true
     }, {
         cache_key: 'application'
@@ -5695,14 +5744,35 @@ Application.prototype = {
         self.default_locale
       );
 
+      if (!self.isSupportedLocale(self.current_locale)) {
+        self.current_locale = self.default_locale;
+      }
+
       var locales = [self.default_locale];
       if (self.current_locale != self.default_locale) {
         locales.push(self.current_locale);
       }
 
+      //console.log("Current locale: ", self.current_locale);
+
       var sources = [self.current_source || 'index'];
       self.initData(locales, sources, callback);
     });
+  },
+
+  /**
+   * Checks if the locale is part of the application
+   *
+   * @param locale
+   * @returns {boolean}
+   */
+  isSupportedLocale: function(locale) {
+    if (!this.languages) return false;
+    for(var i=0; i<this.languages.length; i++) {
+      if (this.languages[i].locale == locale)
+        return true;
+    }
+    return false;
   },
 
   /**
@@ -5796,7 +5866,7 @@ Application.prototype = {
     locales.forEach(function(locale) {
       if (!self.languages_by_locale[locale]) {
         data[locale] = function (callback) {
-          self.getApiClient().get("languages/" + locale, {definition: true}, {cache_key: self.getLanguageKey(locale)}, function (error, data) {
+          self.getApiClient().get("languages/" + locale + "/definition", {}, {cache_key: self.getLanguageKey(locale)}, function (error, data) {
             if (error) {
               callback(error, null);
               return;
@@ -5865,9 +5935,9 @@ Application.prototype = {
           var key = utils.generateSourceKey(source);
           self.getApiClient().get("sources/" + key + '/translations', {
             locale: locale,
-            sources: true,
             ignored: true,
-            per_page: 100000
+            all: true,
+            app_id: self.key
           }, {
             cache_key: locale + '/sources' + utils.normalizePath(source)
           }, function(error, data) {
@@ -5988,7 +6058,7 @@ Application.prototype = {
     var self = this;
     self.missing_keys_by_source = null;
 
-    this.getApiClient().post("sources/register_keys", {source_keys: JSON.stringify(params)}, function () {
+    this.getApiClient().post("sources/register_keys", {source_keys: JSON.stringify(params), app_id: self.key}, function () {
       utils.keys(self.languages_by_locale).forEach(function (locale) {
         source_keys.forEach(function (source_key) {
           // delete from cache source_key + locale
@@ -6055,7 +6125,7 @@ module.exports = Application;
 
 },{"./api_client":17,"./configuration":21,"./language":24,"./logger":29,"./source":33,"./utils":44}],19:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6085,8 +6155,8 @@ module.exports = Application;
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-var utils       = require("./utils");
-var BaseAdapter = require('./cache_adapters/base');
+var utils        = require("./utils");
+var BaseAdapter  = require('./cache_adapters/base');
 
 var Cache = function(options) {
   this.adapter = null;
@@ -6106,6 +6176,8 @@ var Cache = function(options) {
     if (adapter_class) {
       adapter_class.prototype = utils.extend(new BaseAdapter(), adapter_class.prototype);
       this.adapter = new adapter_class(options);
+      if (options.version_check_interval)
+        this.adapter.version_check_interval = options.version_check_interval;
     }
   }
 
@@ -6186,7 +6258,7 @@ Cache.prototype = {
    */
   fetchVersion: function(callback) {
     if (!this.adapter) {
-      callback(this.options.version || '0');
+      callback({version: this.options.version || '0'});
       return;
     }
     this.adapter.fetchVersion(callback);
@@ -6228,6 +6300,16 @@ Cache.prototype = {
   },
 
   /**
+   * Returns version check interval
+   *
+   * @returns {number}
+   */
+  getVersionCheckInterval: function() {
+    if (!this.adapter) return 0;
+    return this.adapter.version_check_interval * 1000;
+  },
+
+  /**
    * Clears cache
    *
    * @param callback
@@ -6244,7 +6326,7 @@ Cache.prototype = {
 module.exports = Cache;
 },{"./cache_adapters/base":20,"./configuration":21,"./utils":44}],20:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6298,6 +6380,9 @@ Base.prototype = {
   read_only         : true,
   cached_by_source  : true,
   name              : "",
+
+  // check for version every hour - store number in seconds
+  version_check_interval: (60 * 60),
 
   initialize: function(config) {
     this.config = config || {};
@@ -6361,20 +6446,47 @@ Base.prototype = {
       self.info("Cache version from config: " + self.config.version);
       callback(self.config.version);
     } else {
-      self.fetch(VERSION_KEY, "undefined", function (err, data) {
-        self.info("Cache version: " + data);
+      var default_version = JSON.stringify({version: "undefined"});
+      self.fetch(VERSION_KEY, default_version, function (err, data) {
+        data = data || '';
+        if (data.indexOf('{') != -1)
+          data = JSON.parse(data);
+        else
+          data = {version: data};
+        self.info("Cache version: " + data.version);
         callback(data);
       });
     }
   },
 
   storeVersion: function(version, callback) {
-    this.version = version;
-    this.store(VERSION_KEY, this.version, function() {
-      if (callback) callback(this.version);
-    }.bind(this));
+    var self = this;
+    self.version = version;
+
+    // store version with a timestamp when it was last updated
+    var version_data = JSON.stringify({version: self.version, t: self.getVersionTimestamp()});
+    //logger.debug("Storing version data " + version_data);
+
+    self.store(VERSION_KEY, version_data, function() {
+      if (callback) callback(self.version);
+    });
   },
 
+  /**
+   * Returns timestamp based on the frequency interval
+   */
+  getVersionTimestamp: function() {
+    var t = new Date().getTime();
+    //t = t - (t % (this.version_check_interval * 1000));
+    return t;
+  },
+
+  /**
+   * Prefix key with a version
+   *
+   * @param key
+   * @returns {string}
+   */
   getVersionedKey: function(key) {
     var parts = [
       KEY_PREFIX,
@@ -6385,6 +6497,12 @@ Base.prototype = {
     return parts.join('_');
   },
 
+  /**
+   * Remove extensions from data before putting it in cache
+   *
+   * @param data
+   * @returns {*}
+   */
   stripExtensions: function(data) {
     if (utils.isString(data) && data.match(/^\{/)) {
       data = JSON.parse(data);
@@ -6395,6 +6513,11 @@ Base.prototype = {
     return data;
   },
 
+  /**
+   * Get the API request object based on implementation
+   *
+   * @returns {null}
+   */
   getRequest: function() {
     // must be overloaded by cache adapters
     return null;
@@ -6413,7 +6536,7 @@ Base.prototype = {
 module.exports = Base;
 },{"../configuration":21,"../logger":29,"../utils":44}],21:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6666,7 +6789,7 @@ module.exports = new Configuration();
 },{"./../config/application.js":13,"./../config/defaults.js":14,"./../config/english.js":15,"./cache":19,"./utils":44}],22:[function(require,module,exports){
 (function (Buffer){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6839,7 +6962,7 @@ module.exports = HTMLDecorator;
 }).call(this,require("buffer").Buffer)
 },{"../utils":44,"buffer":8}],23:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6960,7 +7083,7 @@ module.exports = {
 };
 },{}],24:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7077,8 +7200,6 @@ Language.prototype = {
         var local_key = this.application.getTranslationKey(translation_key.key);
         if (local_key) translation_key = local_key;
       }
-
-
     }
 
     return translation_key.translate(this, params.tokens, params.options);
@@ -7099,7 +7220,11 @@ Language.prototype = {
   },
 
   getSourceName: function(source) {
-    return source.call && source() || source;
+    var source_name = source.call && source() || source;
+    // limit source name to no more than 60 characters
+    if (source_name && source_name.length > 60)
+      source_name = source_name.substring(0, 60);
+    return source_name;
   },
 
   getSourcePath: function(options) {
@@ -7128,7 +7253,7 @@ module.exports = Language;
 
 },{"./configuration":21,"./language_case":25,"./language_context":27,"./translation_key":42,"./utils":44}],25:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7245,7 +7370,7 @@ module.exports = LanguageCase;
 
 },{"./configuration":21,"./decorators/html":22,"./language_case_rule":26,"./utils":44}],26:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7344,7 +7469,7 @@ module.exports = LanguageCaseRule;
 
 },{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":44}],27:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7463,7 +7588,7 @@ LanguageContext.prototype = {
 module.exports = LanguageContext;
 },{"./configuration":21,"./language_context_rule":28,"./utils":44}],28:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7534,7 +7659,7 @@ LanguageContextRule.prototype = {
 module.exports = LanguageContextRule;
 },{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":44}],29:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7600,7 +7725,7 @@ var Logger = {
 module.exports = Logger;
 },{"./configuration":21,"./utils":44}],30:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7843,7 +7968,7 @@ var MD5 = function (string) {
 module.exports = MD5;
 },{}],31:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8034,7 +8159,7 @@ module.exports = Evaluator;
 
 },{}],32:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8094,7 +8219,7 @@ Parser.prototype = {
 module.exports = Parser;
 },{}],33:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8191,7 +8316,7 @@ module.exports = Source;
 },{"./configuration":21,"./translation":41,"./utils":44}],34:[function(require,module,exports){
 
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8279,7 +8404,7 @@ module.exports = Tml;
 
 },{"./api_adapters/base":16,"./application":18,"./cache_adapters/base":20,"./configuration":21,"./helpers/scripts":23,"./language":24,"./language_case":25,"./language_case_rule":26,"./language_context":27,"./language_context_rule":28,"./logger":29,"./source":33,"./tokenizers/dom":37,"./translation":41,"./translation_key":42,"./translator":43,"./utils":44}],35:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8371,7 +8496,7 @@ DataTokenizer.prototype = {
 module.exports = DataTokenizer;
 },{"../configuration":21,"../tokens/data":38,"../tokens/method":39,"../tokens/piped":40}],36:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8571,7 +8696,7 @@ DecorationTokenizer.prototype = {
 module.exports = DecorationTokenizer;
 },{"../configuration":21,"../utils":44}],37:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9049,7 +9174,7 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 },{"../configuration":21,"../utils":44}],38:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9430,7 +9555,7 @@ DataToken.prototype = {
 module.exports = DataToken;
 },{"../configuration":21,"../decorators/html":22,"../logger":29,"../utils":44}],39:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9521,7 +9646,7 @@ module.exports = MethodToken;
 
 },{"../decorators/html":22,"../utils":44,"./data":38}],40:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9787,7 +9912,7 @@ module.exports = PipedToken;
 
 },{"../decorators/html":22,"../utils":44,"./data":38}],41:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9879,7 +10004,7 @@ module.exports = Translation;
 
 },{"./tokens/data":38,"./utils":44}],42:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10074,7 +10199,7 @@ module.exports = TranslationKey;
 
 },{"./configuration":21,"./decorators/html":22,"./tokenizers/data":35,"./tokenizers/decoration":36,"./translation":41,"./utils":44}],43:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10129,7 +10254,7 @@ module.exports = Translator;
 },{"./utils":44}],44:[function(require,module,exports){
 (function (Buffer){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10461,7 +10586,7 @@ module.exports = {
     var k,i,l=0,c=0,r={},e = null;
     var cb = function(k){
       funcs[k](function(err, data){
-        if(err) callback(err);
+        if(err) return callback(err);
         if(data) r[k] = data;
         c++;
         if(c == l) {
