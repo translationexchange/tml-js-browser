@@ -799,7 +799,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.32',
+      version: '0.4.33',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -9411,7 +9411,7 @@ DataToken.prototype = {
       joiner: 'and',
       less: '{laquo} less',
       translate: false,
-      expandable: true,
+      expandable: false,
       collapsable: true
     };
 
@@ -9428,10 +9428,11 @@ DataToken.prototype = {
     var target_language = options.target_language || language;
 
     var values = [];
+    var value;
     for (var i=0; i<objects.length; i++) {
       var obj = objects[i];
       if (method === null) {
-        var value = this.getTokenValueFromHashParam(obj, language, options);
+        value = this.getTokenValueFromHashParam(obj, language, options);
 
         if (list_options.translate && target_language)
           value = target_language.translate(value, '', {}, options);
@@ -9443,14 +9444,14 @@ DataToken.prototype = {
       } else if (typeof method === "string") {
         if (method.match(/^@/)) {
           var attr = method.replace(/^@/, "");
-          var value = obj[attr] || obj[attr]();
+          value = obj[attr] || obj[attr]();
 
           if (list_options.translate && target_language)
             value = target_language.translate(value, '', {}, options);
 
           values.push(decorator.decorateElement(this, this.sanitize(value, obj, language, utils.extend(options, {safe: false})), options));
         } else {
-          var value = "" + obj;
+          value = "" + obj;
 
           if (list_options.translate && target_language)
             value = target_language.translate(value, '', {}, options);
@@ -9471,7 +9472,7 @@ DataToken.prototype = {
           else
             values.push(decorator.decorateElement(this, attribute || "" + obj, options));
         } else {
-          var value = this.getTokenValueFromHashParam(obj, language, options);
+          value = this.getTokenValueFromHashParam(obj, language, options);
 
           if (list_options.translate && target_language)
             value = target_language.translate(value, '', {}, options);
