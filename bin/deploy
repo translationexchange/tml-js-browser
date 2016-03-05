@@ -124,14 +124,10 @@ if opts[:environment] == 'production'
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
 
-  if opts[:stable]
-    execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
-    execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
-    invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
-    execute("open https://cdn.translationexchange.com/tools/tml/stable/tml.min.js")
-  else
-    execute("open https://cdn.translationexchange.com/tools/tml/#{version}/tml.min.js")
-  end
+  execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
+  execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
+  invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
+  execute("open https://cdn.translationexchange.com/tools/tml/stable/tml.min.js")
 
   execute("git checkout develop")
  
