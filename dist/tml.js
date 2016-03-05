@@ -795,7 +795,6 @@ module.exports = {
     var Emitter = require('tiny-emitter');
     var emitter = new Emitter();
 
-    var DEFAULT_HOST = "https://api.translationexchange.com";
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
@@ -949,7 +948,8 @@ module.exports = {
         tml.app = new tml.Application({
           key: options.key,
           token: cookie.oauth ? cookie.oauth.token : null,
-          host: options.host || DEFAULT_HOST
+          host: options.host,
+          cdn_host: options.cdn_host
         });
 
         tml.app.init(options, function (err) {
