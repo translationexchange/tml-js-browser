@@ -129,6 +129,7 @@ if opts[:environment] == 'production'
   # check in the new version
   execute("git add package.json")
   execute("git commit -m 'Incremented build version to #{version}'")
+  execute("git push")
 
 else
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{opts[:environment]}/tml.js")
