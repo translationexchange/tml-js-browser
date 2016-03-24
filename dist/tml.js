@@ -795,11 +795,10 @@ module.exports = {
     var Emitter = require('tiny-emitter');
     var emitter = new Emitter();
 
-    var DEFAULT_HOST = "https://api.translationexchange.com";
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.31',
+      version: '0.4.40',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -949,7 +948,8 @@ module.exports = {
         tml.app = new tml.Application({
           key: options.key,
           token: cookie.oauth ? cookie.oauth.token : null,
-          host: options.host || DEFAULT_HOST
+          host: options.host,
+          cdn_host: options.cdn_host
         });
 
         tml.app.init(options, function (err) {
@@ -1020,8 +1020,10 @@ module.exports = {
           helpers.updateCurrentLocale(tml.options.key, locale);
           tml.config.currentLanguage = tml.app.getCurrentLanguage();
 
-          if (this.tokenizer) {
+          if (this.tokenizer && this.tokenizer.updateAllNodes) {
             this.tokenizer.updateAllNodes();
+          } else {
+            window.location.reload();
           }
 
           if (tml.utils.isFunction(tml.options.onLanguageChange)) {
@@ -1733,14 +1735,12 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
-(function (global){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
-/* eslint-disable no-proto */
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
@@ -1780,22 +1780,20 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
-  ? global.TYPED_ARRAY_SUPPORT
-  : (function () {
-      function Bar () {}
-      try {
-        var arr = new Uint8Array(1)
-        arr.foo = function () { return 42 }
-        arr.constructor = Bar
-        return arr.foo() === 42 && // typed array instances can be augmented
-            arr.constructor === Bar && // constructor can be set
-            typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
-            arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
-      } catch (e) {
-        return false
-      }
-    })()
+Buffer.TYPED_ARRAY_SUPPORT = (function () {
+  function Bar () {}
+  try {
+    var arr = new Uint8Array(1)
+    arr.foo = function () { return 42 }
+    arr.constructor = Bar
+    return arr.foo() === 42 && // typed array instances can be augmented
+        arr.constructor === Bar && // constructor can be set
+        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+        arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+  } catch (e) {
+    return false
+  }
+})()
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -1951,16 +1949,10 @@ function fromJsonObject (that, object) {
   return that
 }
 
-if (Buffer.TYPED_ARRAY_SUPPORT) {
-  Buffer.prototype.__proto__ = Uint8Array.prototype
-  Buffer.__proto__ = Uint8Array
-}
-
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
-    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -3277,7 +3269,6 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -5223,9 +5214,6 @@ var BaseAdapter = require('./api_adapters/base');
 
 var API_PATH = "/v1/";
 
-var CDN_URL = 'https://cdn.translationexchange.com';
-// var CDN_URL      = 'https://trex-snapshots.s3-us-west-1.amazonaws.com';
-
 /**
  * API Client
  *
@@ -5271,7 +5259,7 @@ ApiClient.prototype = {
     var self = this;
     var t = new Date().getTime();
 
-    var url = CDN_URL + "/" + this.application.key + "/version.json";
+    var url = this.application.getCdnHost() + "/" + this.application.key + "/version.json";
 
     self.adapter.get(url, {t: t}, function (error, response, data) {
       if (response.status == 403 || error || !data) {
@@ -5366,7 +5354,7 @@ ApiClient.prototype = {
       return;
     }
 
-    var cdn_url = CDN_URL + "/" + this.application.key + "/" + this.cache.version + utils.normalizePath(key) + ".json";
+    var cdn_url = this.application.getCdnHost() + "/" + this.application.key + "/" + this.cache.version + utils.normalizePath(key) + ".json";
     self.adapter.get(cdn_url, {}, function (error, response, data) {
       if (!data || data.match(/xml/)) error = 'Not found';
 
@@ -5517,7 +5505,8 @@ var Language    = require("./language");
 var Source      = require("./source");
 var ApiClient   = require("./api_client");
 
-var DEFAULT_HOST = "https://api.translationexchange.com";
+var API_HOST = "https://api.translationexchange.com";
+var CDN_HOST = "https://cdn.translationexchange.com";
 
 /**
  * Application
@@ -5548,7 +5537,16 @@ Application.prototype = {
    * @returns {*|string}
    */
   getHost: function() {
-    return this.host || DEFAULT_HOST;
+    return this.host || API_HOST;
+  },
+
+  /**
+   * Returns CDN host
+   *
+   * @returns {*|string}
+   */
+  getCdnHost: function() {
+    return this.cdn_host || CDN_HOST;
   },
 
   /**
@@ -9377,12 +9375,22 @@ DataToken.prototype = {
    *
    * @example
    *
-   * tr("Hello {user_list}!", {user_list: [[user1, user2, user3], "@name"]}}
+   * tr("Hello {user_list}!", {user_list: [[user1, user2, user3], "{$0}", {}]}}
    * tr("{users} joined the site", {users: [[user1, user2, user3], "@name"]})
-   * tr("{users} joined the site", {users: [[user1, user2, user3], function(user) { return user.name; }]})
+   * tr("{users} joined the site", {users: [[user1, user2, user3], function(user) { return tr(user.name); }]})
    * tr("{users} joined the site", {users: [[user1, user2, user3], {attribute: "name"})
    * tr("{users} joined the site", {users: [[user1, user2, user3], {attribute: "name", value: "<strong>{$0}</strong>"})
    * tr("{users} joined the site", {users: [[user1, user2, user3], "<strong>{$0}</strong>")
+
+   var user_func = function(user) {}
+
+   tokens = {users: [someArr]}
+
+   <p tml-tr users="someArr" users-format='{attribute: "name"}' users-options=''>
+      {users} joined the site
+   </p>
+
+   * tr("{count || message}", {user: [1234, function(value) { return tml_localize(value); }]})
    *
    * tr("{users} joined the site", {users: [[user1, user2, user3], "@name", {
    *   limit: 4,
@@ -9402,6 +9410,7 @@ DataToken.prototype = {
       separator: ", ",
       joiner: 'and',
       less: '{laquo} less',
+      translate: false,
       expandable: false,
       collapsable: true
     };
@@ -9416,31 +9425,59 @@ DataToken.prototype = {
     if (options.skip_decorations)
       list_options.expandable = false;
 
+    var target_language = options.target_language || language;
+
     var values = [];
+    var value;
     for (var i=0; i<objects.length; i++) {
       var obj = objects[i];
       if (method === null) {
-        values.push(decorator.decorateElement(this, this.getTokenValueFromHashParam(obj, language, options), options));
+        value = this.getTokenValueFromHashParam(obj, language, options);
+
+        if (list_options.translate && target_language)
+          value = target_language.translate(value, '', {}, options);
+
+        values.push(decorator.decorateElement(this, value, options));
       } else if (utils.isFunction(method)) {
         values.push(decorator.decorateElement(this, this.sanitize(method(obj), obj, language, utils.extend(options, {safe: true})), options));
+
       } else if (typeof method === "string") {
         if (method.match(/^@/)) {
           var attr = method.replace(/^@/, "");
-          values.push(decorator.decorateElement(this, this.sanitize(obj[attr] || obj[attr](), obj, language, utils.extend(options, {safe: false})), options));
+          value = obj[attr] || obj[attr]();
+
+          if (list_options.translate && target_language)
+            value = target_language.translate(value, '', {}, options);
+
+          values.push(decorator.decorateElement(this, this.sanitize(value, obj, language, utils.extend(options, {safe: false})), options));
         } else {
-          values.push(decorator.decorateElement(this, method.replace("{$0}", this.sanitize("" + obj, obj, language, utils.extend(options, {safe: false}))), options));
+          value = "" + obj;
+
+          if (list_options.translate && target_language)
+            value = target_language.translate(value, '', {}, options);
+
+          values.push(decorator.decorateElement(this, method.replace("{$0}", this.sanitize(value, obj, language, utils.extend(options, {safe: false}))), options));
         }
       } else if (utils.isObject(method)) {
         var attribute = method.attribute || method.property;
 
         if (attribute && obj[attribute]) {
           attribute = this.sanitize(obj[attribute], obj, language, utils.extend(options, {safe: false}));
+
+          if (list_options.translate && target_language)
+            attribute = target_language.translate(attribute, '', {}, options);
+
           if (method.value)
             values.push(decorator.decorateElement(this, method.value.replace("{$0}", attribute), options));
           else
             values.push(decorator.decorateElement(this, attribute || "" + obj, options));
         } else {
-          values.push(decorator.decorateElement(this, this.getTokenValueFromHashParam(obj, language, options), options));
+          value = this.getTokenValueFromHashParam(obj, language, options);
+
+          if (list_options.translate && target_language)
+            value = target_language.translate(value, '', {}, options);
+
+          values.push(decorator.decorateElement(this, value, options));
         }
       }
     }
@@ -9450,8 +9487,6 @@ DataToken.prototype = {
   
     if (!list_options.joiner || list_options.joiner === "")
       return values.join(list_options.separator);
-
-    var target_language = options.target_language || language;
 
     var joiner = target_language.translate(list_options.joiner, list_options.description, {}, options);
   

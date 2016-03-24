@@ -46,8 +46,7 @@ def execute(cmd)
 end
 
 opts = Slop.parse do |o|
-  o.string  '-s', '--stable' , 'indicates that stable section needs to be updated', default: false
-  o.string  '-e', '--environment' , 'indicates the desired environment you wish to deploy to', default: 'staging'
+  o.string  '-e', '--environment' , 'indicates the desired environment you wish to deploy to', default: 'sandbox'
   o.on      '-v', '--version', 'prints current version of the SDK (for sanity check)' do
     puts "Current version is #{version}"
     exit
@@ -59,7 +58,7 @@ def version_or_environment(opts)
 end
 
 def invalidate(files, opts)
-  unless ['production', 'staging'].include?(opts[:environment])
+  unless ['production', 'staging', 'sandbox'].include?(opts[:environment])
     return
   end
 
@@ -95,15 +94,7 @@ def invalidate(files, opts)
   puts res.body
 end
 
-# increment version
-puts("Incrementing build number to #{build_number + 1}...\n")
-increment_build_number
-
 pp("Deploying version #{version} to tools/tml/#{version_or_environment(opts)}/tml.js...")
-
-# check in the new version
-execute("git add package.json")
-execute("git commit -m 'Incremented build version to #{version}'")
 
 execute('(grunt build)')
 
@@ -124,17 +115,21 @@ if opts[:environment] == 'production'
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
 
-  if opts[:stable]
-    execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
-    execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
-    invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
-    execute("open https://cdn.translationexchange.com/tools/tml/stable/tml.min.js")
-  else
-    execute("open https://cdn.translationexchange.com/tools/tml/#{version}/tml.min.js")
-  end
+  execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
+  execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
+  invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
+  execute("open https://cdn.translationexchange.com/tools/tml/stable/tml.min.js")
 
   execute("git checkout develop")
- 
+
+  # increment version
+  puts("Incrementing build number to #{build_number + 1}...\n")
+  increment_build_number
+
+  # check in the new version
+  execute("git add package.json")
+  execute("git commit -m 'Incremented build version to #{version}'")
+
 else
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{opts[:environment]}/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{opts[:environment]}/tml.min.js")
