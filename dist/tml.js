@@ -498,7 +498,7 @@ var helpers = {
       "                                                                                      |___/",
       "   version " + version,
       "",
-      "   We are hiring! http://translationexchange.com/jobs ",
+      "   We are hiring! http://translationexchange.com/careers ",
       " "
     ].join("\n"));
   },
@@ -799,7 +799,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.40',
+      version: '0.4.41',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -5735,6 +5735,11 @@ Application.prototype = {
       }
 
       self.extend(data);
+
+      if (data.settings) {
+        utils.merge(config, data.settings);
+      }
+
       self.loadExtension(data);
 
       self.current_locale = (
