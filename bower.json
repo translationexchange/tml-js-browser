@@ -2,6 +2,7 @@
   "name": "tml-js",
   "description": "Translation plugin for browsers.",
   "version": "0.4.4",
+  "main": "./dist/tml.min.js",
   "license": "MIT",
   "ignore": [
     "**/.*",
