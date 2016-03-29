@@ -799,7 +799,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.41',
+      version: '0.4.42',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -1649,7 +1649,7 @@ DomTokenizer.prototype = {
 
 
   adjustName: function(node) {
-    var name = node.tagName && node.tagName.toLowerCase() || 'node';
+    var name = node.tagName.toLowerCase();
     var map = this.getOption("name_mapping");
     name = map[name] ? map[name] : name;
     return name;
