@@ -1692,8 +1692,8 @@ DomTokenizer.prototype = {
   },
 
   isValidTml: function(tml) {
-    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}/gi;
-    return !this.isEmptyString(tml.replace(tokens, ''));
+    //var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}/gi;
+    return !this.isEmptyString(tml.replace(/<[^>]*>|\{[^\}]*\}/gi,''));
   },
 
   sanitizeValue: function(value) {
