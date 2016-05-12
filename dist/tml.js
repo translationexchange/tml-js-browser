@@ -799,7 +799,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.44',
+      version: '0.4.45',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -932,7 +932,7 @@ module.exports = {
           current_source: helpers.getCurrentSource(options),
           current_locale: helpers.getCurrentLocale(options.key, options.current_locale),
           current_translator: cookie.translator ? new tml.Translator(cookie.translator) : null,
-          accepted_locales: window.navigator.languages,
+          accepted_locales: helpers.getBrowserLanguages(),
           cache: {
             enabled: true,
             adapter: "browser",
@@ -1692,8 +1692,8 @@ DomTokenizer.prototype = {
   },
 
   isValidTml: function(tml) {
-    //var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}/gi;
-    return !this.isEmptyString(tml.replace(/<[^>]*>|\{[^\}]*\}/gi,''));
+    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}|{}/gi;
+    return !this.isEmptyString(tml.replace(tokens, ''));
   },
 
   sanitizeValue: function(value) {
