@@ -932,7 +932,7 @@ module.exports = {
           current_source: helpers.getCurrentSource(options),
           current_locale: helpers.getCurrentLocale(options.key, options.current_locale),
           current_translator: cookie.translator ? new tml.Translator(cookie.translator) : null,
-          accepted_locales: window.navigator.languages,
+          accepted_locales: helpers.getBrowserLanguages(),
           cache: {
             enabled: true,
             adapter: "browser",
@@ -1692,7 +1692,7 @@ DomTokenizer.prototype = {
   },
 
   isValidTml: function(tml) {
-    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}/gi;
+    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}|{}/gi;
     return !this.isEmptyString(tml.replace(tokens, ''));
   },
 
@@ -8588,6 +8588,12 @@ DecorationTokenizer.prototype = {
 
   parseTree: function(name, type) {
     var tree = [name];
+    Object.defineProperty(tree, "tokenType", {
+      value: type,
+      configurable: true,
+      enumerable: false,
+      writable: true
+    });
     if (this.tokens.indexOf(name) == -1 && name != RESERVED_TOKEN)
       this.tokens.push(name);
 
