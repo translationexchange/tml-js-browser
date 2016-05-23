@@ -108,8 +108,9 @@ execute("git push")
 if opts[:environment] == 'production'
   execute("git checkout master")
   execute("git merge develop")
-  execute("git tag '#{version}'")
   execute("git push")
+  execute("git tag '#{version}'")
+  execute("git push --tags")
   execute("npm publish")
 
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
