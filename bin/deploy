@@ -107,6 +107,7 @@ execute("git push")
 
 if opts[:environment] == 'production'
   execute("git checkout master")
+  execute("git pull")
   execute("git merge develop")
   execute("git push")
   execute("git tag '#{version}'")
