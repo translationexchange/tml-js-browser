@@ -28,7 +28,7 @@ Links
 Copyright and license
 ==================
 
-Copyright (c) 2015 Translation Exchange, Inc.
+Copyright (c) 2016 Translation Exchange, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
