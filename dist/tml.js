@@ -799,7 +799,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.42',
+      version: '0.4.46',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -932,7 +932,7 @@ module.exports = {
           current_source: helpers.getCurrentSource(options),
           current_locale: helpers.getCurrentLocale(options.key, options.current_locale),
           current_translator: cookie.translator ? new tml.Translator(cookie.translator) : null,
-          accepted_locales: window.navigator.languages,
+          accepted_locales: helpers.getBrowserLanguages(),
           cache: {
             enabled: true,
             adapter: "browser",
@@ -1012,18 +1012,28 @@ module.exports = {
       },
 
       /**
-       * Changes language
+       * Changes language. This method can be used:
+       *
+       *
        *
        * @param locale
+       * @param refresh
        */
-      changeLanguage: function (locale) {
+      changeLanguage: function (locale, refresh) {
         tml.app.changeLanguage(locale, function (language) {
           helpers.updateCurrentLocale(tml.options.key, locale);
           tml.config.currentLanguage = tml.app.getCurrentLanguage();
+          var autoMode = this.tokenizer && this.tokenizer.updateAllNodes;
+          refresh = typeof refresh !== undefined ? refresh : !tml.config.refreshHandled;
 
-          if (this.tokenizer && this.tokenizer.updateAllNodes) {
+          // for dynamic translate body - we want to reload all translations automatically
+          if (autoMode) {
             this.tokenizer.updateAllNodes();
-          } else {
+          }
+
+          if (refresh) {
+            // let SDKs handle it: server side or manual JS (like backbone or jst) - we may need a refresh
+            // other client-side SDKs need to handle it themselves - angular, ember
             window.location.reload();
           }
 
@@ -1649,10 +1659,13 @@ DomTokenizer.prototype = {
 
 
   adjustName: function(node) {
-    var name = node.tagName.toLowerCase();
-    var map = this.getOption("name_mapping");
-    name = map[name] ? map[name] : name;
-    return name;
+    if(node && node.tagName) {
+      var name = node.tagName.toLowerCase();
+      var map = this.getOption("name_mapping");
+      name = map[name] ? map[name] : name;
+      return name;
+    }
+    return "";
   },
 
 
@@ -1689,7 +1702,7 @@ DomTokenizer.prototype = {
   },
 
   isValidTml: function(tml) {
-    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}/gi;
+    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}|{}/gi;
     return !this.isEmptyString(tml.replace(tokens, ''));
   },
 
@@ -5971,6 +5984,9 @@ Application.prototype = {
   },
 
   isInlineModeEnabled: function() {
+    // TODO: ensure that if token is provided in the initial settings - application token
+    // we should still be able to submit missing keys
+
     if (!this.current_translator) return false;
     return this.current_translator.inline;
   },
