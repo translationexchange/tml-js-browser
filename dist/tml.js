@@ -656,9 +656,57 @@ module.exports = {
     );
   },
 
+  childTypeCounts: function(node) {
+    var children = node.childNodes;
+    var counts = {
+      total: 0,
+      inline: 0,
+      breaking: 0,
+      text: 0
+    };
+
+    for (var i = 0; i < children.length; i++) {
+      var child = children[i];
+
+      if (child.nodeType == 1) {
+        counts.total++;
+        if (this.isInline(child))
+          counts.inline++;
+        else
+          counts.breaking++;
+      } else if (child.nodeType == 3 && this.isValidText(child)) {
+        counts.total++;
+        counts.text++;
+      }
+    }
+
+    return counts;
+  },
+
+  childElementCount: function(node) {
+    var count = 0;
+    var children = node.childNodes;
+    for (var i = 0; i < children.length; i++) {
+      if (children[i].nodeType == 1) {
+        count++;
+      }
+    }
+
+    return count;
+  },
+
+  hasOnlyLinks: function(node) {
+    var count = this.childElementCount(node);
+    return (count == node.getElementsByTagName('A').length);
+  },
+
   hasInlineSiblings: function(node) {
+    if (this.hasOnlyLinks(node.parentNode))
+      return false;
+
+    var has_siblings = (node.parentNode && node.parentNode.childNodes.length > 1);
     return (
-      (node.parentNode && node.parentNode.childNodes.length > 1) &&
+      has_siblings &&
       (node.previousSibling && (this.isInline(node.previousSibling) || this.isValidText(node.previousSibling))) ||
       (node.nextSibling && (this.isInline(node.nextSibling) || this.isValidText(node.nextSibling)))
     );
@@ -1422,7 +1470,7 @@ DomTokenizer.prototype = {
       var child = node.childNodes[i];
       if(!child || !this.isTranslatable(child)) continue;
 
-      if (child.nodeType == 3 || dom.isInline(child) && dom.hasInlineSiblings(child)) {
+      if (child.nodeType == 3 || (dom.isInline(child) && dom.hasInlineSiblings(child))) {
         buffer.push(child);
       } else {
         this.replaceNodes(buffer);
