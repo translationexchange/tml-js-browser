@@ -68,6 +68,7 @@
     "mocha": "~2.3.2",
     "mocha-lcov-reporter": "~0.0.1",
     "phantomjs": "~1.9.15",
+    "promise": "^7.1.1",
     "proxyquire": "~1.7.2",
     "travis-cov": "~0.2.5"
   },
@@ -76,6 +77,5 @@
       "threshold": 0
     }
   },
-  "browserify-shim": {
-  }
+  "browserify-shim": {}
 }
