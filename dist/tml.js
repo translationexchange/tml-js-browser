@@ -31,6 +31,7 @@
  */
 
 var tml = require('tml-js');
+var promise = require('promise');
 
 /**
  * Ajax API adapter
@@ -50,10 +51,9 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
    *
    * @param url
    * @param params
-   * @param callback
    */
-  get: function(url, params, callback){
-    this.request("get", url, params, callback);
+  get: function(url, params){
+    return this.request("get", url, params);
   },
 
   /**
@@ -61,10 +61,9 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
    *
    * @param url
    * @param params
-   * @param callback
    */
-  post: function(url, params, callback) {
-    this.request("post", url, params, callback);
+  post: function(url, params) {
+    return this.request("post", url, params);
   },
 
   /**
@@ -73,14 +72,11 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
    * @param method
    * @param url
    * @param params
-   * @param callback
    * @returns {boolean}
    */
-  request: function (method, url, params, callback) {
+  request: function (method, url, params) {
     var t0 = new Date();
-
-    if(!callback) callback = function(){};
-
+    
     var
       data,
       xhr = new XMLHttpRequest();
@@ -104,18 +100,33 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
       return false;
     }
 
-    xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-
-    xhr.onload = function() {
-      var t1 = new Date();
-      tml.logger.debug("call took " + (t1-t0) + " mls");
-      var error = xhr.status >= 200 && xhr.status < 400;
-      callback(!error, xhr, xhr.responseText);
-    };
-    xhr.onerror = function(err) {
-      callback(err, xhr);
-    };
-    xhr.send(data);
+    return new promise(function (resolve, reject) {
+      xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+  
+      xhr.onload = function() {
+        var t1 = new Date();
+        tml.logger.debug("call took " + (t1-t0) + " mls");
+        var error = !(xhr.status >= 200 && xhr.status < 300 || xhr.status === 304);
+        if (error) {
+          var err = new Error('Request status: ' + xhr.status);
+          err.xhr = xhr;
+          reject(err);
+        }
+        else {
+          resolve(xhr.responseText);
+        }
+      };
+      xhr.onerror = function(err) {
+        if (typeof err == 'object')
+          err.xhr = xhr;
+        else if (typeof err == 'string') {
+          err = new Error(err);
+          err.xhr = xhr;
+        }
+        reject(err);
+      };
+      xhr.send(data);
+    });
   },
 
   /**
@@ -136,7 +147,7 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
 });
 
 module.exports = Ajax;
-},{"tml-js":34}],2:[function(require,module,exports){
+},{"promise":12,"tml-js":44}],2:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -169,6 +180,7 @@ module.exports = Ajax;
  */
 
 var tml = require('tml-js');
+var promise = require('promise');
 
 /**
  * Browser cache adapter
@@ -202,26 +214,25 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
    *
    * @param key
    * @param fallback
-   * @param callback
    */
-  fetchFromPath: function(key, fallback, callback) {
+  fetchFromPath: function(key, fallback) {
     if (key == 'current_version') {
-      this.fetchDefault(key, fallback, callback);
-      return;
+      return this.fetchDefault(key, fallback);
     }
 
     var cache_path = this.config.path + "/" + this.config.version + "/" + key + ".json";
     var self = this;
 
-    self.getRequest().get(cache_path, {}, function(err, xhr, data) {
-      if (err || xhr.status != 200 || data === null) {
-        self.fetchDefault(key, fallback, callback);
-      } else {
-        self.store(key, data, function () {
-          callback(null, data);
+    return self.getRequest().get(cache_path, {}, { resolveWithResponse: true })
+        .then(function(data) {
+          if (!data) 
+            throw new Error('no data');
+          
+          return self.store(key, data);
+        })
+        .catch(function (err) {
+          return self.fetchDefault(key, fallback);
         });
-      }
-    });
   },
 
   /**
@@ -229,19 +240,18 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
    *
    * @param key
    * @param fallback
-   * @param callback
    */
-  fetch: function(key, fallback, callback) {
+  fetch: function(key, fallback) {
     var val = this.cache.getItem(this.getVersionedKey(key));
     if (val) {
       this.info("cache hit " + key);
-      callback(null, val);
+      return promise.resolve(val);
     } else {
       this.info("cache miss " + key);
       if (this.config.path) {
-        this.fetchFromPath(key, fallback, callback);
+        return this.fetchFromPath(key, fallback);
       } else {
-        this.fetchDefault(key, fallback, callback);
+        return this.fetchDefault(key, fallback);
       }
     }
   },
@@ -265,56 +275,51 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
    *
    * @param key
    * @param value
-   * @param callback
    */
-  store: function(key, value, callback) {
+  store: function(key, value) {
     var versionedKey = this.getVersionedKey(key);
     this.info("cache store " + key);
     this.cache.setItem(versionedKey, this.stripExtensions(value));
-    if(callback) callback(null, value);
+    return promise.resolve(value);
   },
 
   /**
    * Delete data from browser cache
    *
    * @param key
-   * @param callback
    */
-  del: function(key, callback) {
+  del: function(key) {
     this.info("cache del " + key);
     this.cache.removeItem(this.getVersionedKey(key));
-    if(callback) callback(null);
+    return promise.resolve();
   },
 
   /**
    * Check if data exists in browser cache
    *
    * @param key
-   * @param callback
    */
-  exists: function(key, callback){
+  exists: function(key){
     var val = this.cache.getItem(this.getVersionedKey(key));
-    if (callback) callback(!!val);
+    return promise.resolve(!!val);
   },
 
   /**
    * Clear browser cache
-   *
-   * @param callback
    */
-  clear: function(callback) {
+  clear: function() {
     for (var key in this.cache){
       if (key.match(/^tml_/))
         if (!key.match(/current_version/))
           this.cache.removeItem(key);
     }
-    if (callback) callback(null);
+    return promise.resolve();
   }
 
 });
 
 module.exports = Browser;
-},{"tml-js":34}],3:[function(require,module,exports){
+},{"promise":12,"tml-js":44}],3:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -347,6 +352,7 @@ module.exports = Browser;
  */
 
 var tml = require('tml-js');
+var promise = require('promise');
 
 /**
  * Inline cache adapter
@@ -381,9 +387,8 @@ Inline.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
    *
    * @param key
    * @param def
-   * @param callback
    */
-  fetch: function(key, def, callback) {
+  fetch: function(key, def) {
     var parts = key.split("/");
     var val = this.cache;
 
@@ -395,8 +400,7 @@ Inline.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
     if (val) {
       this.info("cache hit " + key);
       val = JSON.stringify(val);
-      if (callback) callback(null, val);
-      return;
+      return promise.resolve(val);
     }
 
     this.info("cache miss " + key);
@@ -449,7 +453,7 @@ Inline.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
 });
 
 module.exports = Inline;
-},{"tml-js":34}],4:[function(require,module,exports){
+},{"promise":12,"tml-js":44}],4:[function(require,module,exports){
 /**
  * Copyright (c) 2015 Translation Exchange, Inc.
  *
@@ -483,7 +487,7 @@ module.exports = Inline;
 
 var tml   = require('tml-js');
 var utils = tml.utils;
-
+var promise = require('promise');
 var helpers = {
 
   printWelcomeMessage: function (version) {
@@ -539,11 +543,16 @@ var helpers = {
     }
 
     tml.logger.debug("loading agent from " + agent_host);
+    return new promise(function (resolve) {
+      function resolveAndCallback() {
+        resolve();
+        if (utils.isFunction(callback)) callback();
+      }
 
-    utils.addJS(window.document, 'tml-agent', agent_host, function() {
-      Trex.init(app.key, options);
-      if (callback)
-        Trex.ready(callback);
+      utils.addJS(window.document, 'tml-agent', agent_host, function() {
+        Trex.init(app.key, options);
+        Trex.ready(resolveAndCallback);
+      });
     });
   },
 
@@ -637,7 +646,7 @@ module.exports = {
   includeLs:            helpers.includeLs,
   includeAgent:         helpers.includeAgent
 };
-},{"tml-js":34}],5:[function(require,module,exports){
+},{"promise":12,"tml-js":44}],5:[function(require,module,exports){
 var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code", "kbd"];
 var separators  = ["br", "hr"];
 
@@ -794,6 +803,7 @@ module.exports = {
     var helpers = require('./helpers');
     var DomTokenizer = require('./tokenizers/dom');
     var Emitter = require('tiny-emitter');
+    var promise = require('promise');
     var emitter = new Emitter();
 
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
@@ -833,16 +843,16 @@ module.exports = {
         if (tml.config.debug || options.info) {
           helpers.printWelcomeMessage(tml.version);
         }
-
-        tml.initApplication(options, function () {
-          tml.startKeyListener();
-
-          tml.startSourceListener(options);
-
-          if (callback) {
-            callback();
-          }
-        });
+        return tml.initApplication(options)
+            .then(function () {
+              tml.startKeyListener();
+    
+              tml.startSourceListener(options);
+    
+              if (callback) {
+                callback();
+              }
+            });
       },
 
       // submit any newly registered keys every 3 seconds
@@ -906,9 +916,8 @@ module.exports = {
        * Initializes application
        *
        * @param options
-       * @param callback
        */
-      initApplication: function (options, callback) {
+      initApplication: function (options) {
         var t0 = new Date();
 
         var cookie = helpers.getCookie(options.key);
@@ -952,50 +961,55 @@ module.exports = {
           host: options.host,
           cdn_host: options.cdn_host
         });
-
-        tml.app.init(options, function (err) {
-
-          if ((options.translateBody || options.translate_body) && mutationObserver) {
-            tml.translateElement(document);
-          }
-
-          tml.domReady(function () {
-
-            if ((options.translateBody || options.translate_body) && !mutationObserver) {
-              tml.translateElement(document.body);
-            }
-
-            var t1 = new Date();
-            tml.logger.debug("page render took " + (t1 - t0) + " mls");
-
-            if ((options.translateTitle || options.translate_title) && document.title !== "") {
-              document.title = tml.translateLabel(document.title);
-            }
-
-            if (!options.agent) options.agent = {};
-
-            if (options.language_selector) {
-              helpers.includeLs(options.language_selector);
-            }
-
-            helpers.includeAgent(tml.app, {
-              host: options.agent.host,
-              cache: options.agent.cache || 864000000,
-              domains: options.agent.domains || {},
-              locale: tml.app.current_locale,
-              source: tml.app.current_source,
-              sdk: options.sdk || 'tml-js v' + tml.version,
-              css: tml.app.css,
-              languages: tml.app.languages
-            }, function () {
-              if (typeof(options.onLoad) == "function") {
-                options.onLoad(tml.app);
+        return tml.app.init(options)
+            .catch(function (err) {
+              console.log(err.stack);
+              if (options.onInitError && options.onInitError.call) {
+                options.onInitError(err);
               }
-              tml.emit('load');
-              if (callback) callback();
+            })
+            .then(function () {
+              if ((options.translateBody || options.translate_body) && mutationObserver) {
+                tml.translateElement(document);
+              }
+              return new promise(function (resolve) {
+                tml.domReady(function () {
+                  if ((options.translateBody || options.translate_body) && !mutationObserver) {
+                    tml.translateElement(document.body);
+                  }
+  
+                  var t1 = new Date();
+                  tml.logger.debug("page render took " + (t1 - t0) + " mls");
+  
+                  if ((options.translateTitle || options.translate_title) && document.title !== "") {
+                    document.title = tml.translateLabel(document.title);
+                  }
+  
+                  if (!options.agent) options.agent = {};
+  
+                  if (options.language_selector) {
+                    helpers.includeLs(options.language_selector);
+                  }
+  
+                  helpers.includeAgent(tml.app, {
+                    host: options.agent.host,
+                    cache: options.agent.cache || 864000000,
+                    domains: options.agent.domains || {},
+                    locale: tml.app.current_locale,
+                    source: tml.app.current_source,
+                    sdk: options.sdk || 'tml-js v' + tml.version,
+                    css: tml.app.css,
+                    languages: tml.app.languages
+                  }).then(function () {
+                    if (typeof(options.onLoad) == "function") {
+                      options.onLoad(tml.app);
+                    }
+                    tml.emit('load');
+                    resolve();
+                  });
+                });
+              });
             });
-          });
-        });
       },
 
       /**
@@ -1020,29 +1034,29 @@ module.exports = {
        * @param refresh
        */
       changeLanguage: function (locale, refresh) {
-        tml.app.changeLanguage(locale, function (language) {
-          helpers.updateCurrentLocale(tml.options.key, locale);
-          tml.config.currentLanguage = tml.app.getCurrentLanguage();
-          var autoMode = this.tokenizer && this.tokenizer.updateAllNodes;
-          refresh = typeof refresh !== undefined ? refresh : !tml.config.refreshHandled;
-
-          // for dynamic translate body - we want to reload all translations automatically
-          if (autoMode) {
-            this.tokenizer.updateAllNodes();
-          }
-
-          if (refresh) {
-            // let SDKs handle it: server side or manual JS (like backbone or jst) - we may need a refresh
-            // other client-side SDKs need to handle it themselves - angular, ember
-            window.location.reload();
-          }
-
-          if (tml.utils.isFunction(tml.options.onLanguageChange)) {
-            tml.options.onLanguageChange(language);
-          }
-
-          tml.emit('language-change', language);
-        }.bind(this));
+        return tml.app.changeLanguage(locale)
+            .then(function (language) {
+              helpers.updateCurrentLocale(tml.options.key, locale);
+              tml.config.currentLanguage = tml.app.getCurrentLanguage();
+              var autoMode = this.tokenizer && this.tokenizer.updateAllNodes;
+              refresh = typeof refresh !== undefined ? refresh : !tml.config.refreshHandled;
+    
+              // for dynamic translate body - we want to reload all translations automatically
+              if (autoMode) {
+                this.tokenizer.updateAllNodes();
+              }
+    
+              if (refresh) {
+                // let SDKs handle it: server side or manual JS (like backbone or jst) - we may need a refresh
+                // other client-side SDKs need to handle it themselves - angular, ember
+                window.location.reload();
+              }
+    
+              if (tml.utils.isFunction(tml.options.onLanguageChange)) {
+                tml.options.onLanguageChange(language);
+              }
+              tml.emit('language-change', language);
+            }.bind(this));
       },
 
 
@@ -1326,7 +1340,7 @@ module.exports = {
   }
 ));
 
-},{"./api_adapters/ajax":1,"./cache_adapters/browser":2,"./cache_adapters/inline":3,"./helpers":4,"./tokenizers/dom":7,"tiny-emitter":12,"tml-js":34}],7:[function(require,module,exports){
+},{"./api_adapters/ajax":1,"./cache_adapters/browser":2,"./cache_adapters/inline":3,"./helpers":4,"./tokenizers/dom":7,"promise":12,"tiny-emitter":22,"tml-js":44}],7:[function(require,module,exports){
 var tml         = require('tml-js');
 var config      = tml.config;
 var utils       = tml.utils;
@@ -1748,7 +1762,7 @@ DomTokenizer.prototype = {
 
 module.exports = DomTokenizer;
 
-},{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
+},{"../helpers/dom-helpers":5,"tml-js":44}],8:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -3531,6 +3545,866 @@ module.exports = isArray || function (val) {
 };
 
 },{}],12:[function(require,module,exports){
+'use strict';
+
+module.exports = require('./lib')
+
+},{"./lib":17}],13:[function(require,module,exports){
+'use strict';
+
+var asap = require('asap/raw');
+
+function noop() {}
+
+// States:
+//
+// 0 - pending
+// 1 - fulfilled with _value
+// 2 - rejected with _value
+// 3 - adopted the state of another promise, _value
+//
+// once the state is no longer pending (0) it is immutable
+
+// All `_` prefixed properties will be reduced to `_{random number}`
+// at build time to obfuscate them and discourage their use.
+// We don't use symbols or Object.defineProperty to fully hide them
+// because the performance isn't good enough.
+
+
+// to avoid using try/catch inside critical functions, we
+// extract them to here.
+var LAST_ERROR = null;
+var IS_ERROR = {};
+function getThen(obj) {
+  try {
+    return obj.then;
+  } catch (ex) {
+    LAST_ERROR = ex;
+    return IS_ERROR;
+  }
+}
+
+function tryCallOne(fn, a) {
+  try {
+    return fn(a);
+  } catch (ex) {
+    LAST_ERROR = ex;
+    return IS_ERROR;
+  }
+}
+function tryCallTwo(fn, a, b) {
+  try {
+    fn(a, b);
+  } catch (ex) {
+    LAST_ERROR = ex;
+    return IS_ERROR;
+  }
+}
+
+module.exports = Promise;
+
+function Promise(fn) {
+  if (typeof this !== 'object') {
+    throw new TypeError('Promises must be constructed via new');
+  }
+  if (typeof fn !== 'function') {
+    throw new TypeError('not a function');
+  }
+  this._45 = 0;
+  this._81 = 0;
+  this._65 = null;
+  this._54 = null;
+  if (fn === noop) return;
+  doResolve(fn, this);
+}
+Promise._10 = null;
+Promise._97 = null;
+Promise._61 = noop;
+
+Promise.prototype.then = function(onFulfilled, onRejected) {
+  if (this.constructor !== Promise) {
+    return safeThen(this, onFulfilled, onRejected);
+  }
+  var res = new Promise(noop);
+  handle(this, new Handler(onFulfilled, onRejected, res));
+  return res;
+};
+
+function safeThen(self, onFulfilled, onRejected) {
+  return new self.constructor(function (resolve, reject) {
+    var res = new Promise(noop);
+    res.then(resolve, reject);
+    handle(self, new Handler(onFulfilled, onRejected, res));
+  });
+};
+function handle(self, deferred) {
+  while (self._81 === 3) {
+    self = self._65;
+  }
+  if (Promise._10) {
+    Promise._10(self);
+  }
+  if (self._81 === 0) {
+    if (self._45 === 0) {
+      self._45 = 1;
+      self._54 = deferred;
+      return;
+    }
+    if (self._45 === 1) {
+      self._45 = 2;
+      self._54 = [self._54, deferred];
+      return;
+    }
+    self._54.push(deferred);
+    return;
+  }
+  handleResolved(self, deferred);
+}
+
+function handleResolved(self, deferred) {
+  asap(function() {
+    var cb = self._81 === 1 ? deferred.onFulfilled : deferred.onRejected;
+    if (cb === null) {
+      if (self._81 === 1) {
+        resolve(deferred.promise, self._65);
+      } else {
+        reject(deferred.promise, self._65);
+      }
+      return;
+    }
+    var ret = tryCallOne(cb, self._65);
+    if (ret === IS_ERROR) {
+      reject(deferred.promise, LAST_ERROR);
+    } else {
+      resolve(deferred.promise, ret);
+    }
+  });
+}
+function resolve(self, newValue) {
+  // Promise Resolution Procedure: https://github.com/promises-aplus/promises-spec#the-promise-resolution-procedure
+  if (newValue === self) {
+    return reject(
+      self,
+      new TypeError('A promise cannot be resolved with itself.')
+    );
+  }
+  if (
+    newValue &&
+    (typeof newValue === 'object' || typeof newValue === 'function')
+  ) {
+    var then = getThen(newValue);
+    if (then === IS_ERROR) {
+      return reject(self, LAST_ERROR);
+    }
+    if (
+      then === self.then &&
+      newValue instanceof Promise
+    ) {
+      self._81 = 3;
+      self._65 = newValue;
+      finale(self);
+      return;
+    } else if (typeof then === 'function') {
+      doResolve(then.bind(newValue), self);
+      return;
+    }
+  }
+  self._81 = 1;
+  self._65 = newValue;
+  finale(self);
+}
+
+function reject(self, newValue) {
+  self._81 = 2;
+  self._65 = newValue;
+  if (Promise._97) {
+    Promise._97(self, newValue);
+  }
+  finale(self);
+}
+function finale(self) {
+  if (self._45 === 1) {
+    handle(self, self._54);
+    self._54 = null;
+  }
+  if (self._45 === 2) {
+    for (var i = 0; i < self._54.length; i++) {
+      handle(self, self._54[i]);
+    }
+    self._54 = null;
+  }
+}
+
+function Handler(onFulfilled, onRejected, promise){
+  this.onFulfilled = typeof onFulfilled === 'function' ? onFulfilled : null;
+  this.onRejected = typeof onRejected === 'function' ? onRejected : null;
+  this.promise = promise;
+}
+
+/**
+ * Take a potentially misbehaving resolver function and make sure
+ * onFulfilled and onRejected are only called once.
+ *
+ * Makes no guarantees about asynchrony.
+ */
+function doResolve(fn, promise) {
+  var done = false;
+  var res = tryCallTwo(fn, function (value) {
+    if (done) return;
+    done = true;
+    resolve(promise, value);
+  }, function (reason) {
+    if (done) return;
+    done = true;
+    reject(promise, reason);
+  })
+  if (!done && res === IS_ERROR) {
+    done = true;
+    reject(promise, LAST_ERROR);
+  }
+}
+
+},{"asap/raw":21}],14:[function(require,module,exports){
+'use strict';
+
+var Promise = require('./core.js');
+
+module.exports = Promise;
+Promise.prototype.done = function (onFulfilled, onRejected) {
+  var self = arguments.length ? this.then.apply(this, arguments) : this;
+  self.then(null, function (err) {
+    setTimeout(function () {
+      throw err;
+    }, 0);
+  });
+};
+
+},{"./core.js":13}],15:[function(require,module,exports){
+'use strict';
+
+//This file contains the ES6 extensions to the core Promises/A+ API
+
+var Promise = require('./core.js');
+
+module.exports = Promise;
+
+/* Static Functions */
+
+var TRUE = valuePromise(true);
+var FALSE = valuePromise(false);
+var NULL = valuePromise(null);
+var UNDEFINED = valuePromise(undefined);
+var ZERO = valuePromise(0);
+var EMPTYSTRING = valuePromise('');
+
+function valuePromise(value) {
+  var p = new Promise(Promise._61);
+  p._81 = 1;
+  p._65 = value;
+  return p;
+}
+Promise.resolve = function (value) {
+  if (value instanceof Promise) return value;
+
+  if (value === null) return NULL;
+  if (value === undefined) return UNDEFINED;
+  if (value === true) return TRUE;
+  if (value === false) return FALSE;
+  if (value === 0) return ZERO;
+  if (value === '') return EMPTYSTRING;
+
+  if (typeof value === 'object' || typeof value === 'function') {
+    try {
+      var then = value.then;
+      if (typeof then === 'function') {
+        return new Promise(then.bind(value));
+      }
+    } catch (ex) {
+      return new Promise(function (resolve, reject) {
+        reject(ex);
+      });
+    }
+  }
+  return valuePromise(value);
+};
+
+Promise.all = function (arr) {
+  var args = Array.prototype.slice.call(arr);
+
+  return new Promise(function (resolve, reject) {
+    if (args.length === 0) return resolve([]);
+    var remaining = args.length;
+    function res(i, val) {
+      if (val && (typeof val === 'object' || typeof val === 'function')) {
+        if (val instanceof Promise && val.then === Promise.prototype.then) {
+          while (val._81 === 3) {
+            val = val._65;
+          }
+          if (val._81 === 1) return res(i, val._65);
+          if (val._81 === 2) reject(val._65);
+          val.then(function (val) {
+            res(i, val);
+          }, reject);
+          return;
+        } else {
+          var then = val.then;
+          if (typeof then === 'function') {
+            var p = new Promise(then.bind(val));
+            p.then(function (val) {
+              res(i, val);
+            }, reject);
+            return;
+          }
+        }
+      }
+      args[i] = val;
+      if (--remaining === 0) {
+        resolve(args);
+      }
+    }
+    for (var i = 0; i < args.length; i++) {
+      res(i, args[i]);
+    }
+  });
+};
+
+Promise.reject = function (value) {
+  return new Promise(function (resolve, reject) {
+    reject(value);
+  });
+};
+
+Promise.race = function (values) {
+  return new Promise(function (resolve, reject) {
+    values.forEach(function(value){
+      Promise.resolve(value).then(resolve, reject);
+    });
+  });
+};
+
+/* Prototype Methods */
+
+Promise.prototype['catch'] = function (onRejected) {
+  return this.then(null, onRejected);
+};
+
+},{"./core.js":13}],16:[function(require,module,exports){
+'use strict';
+
+var Promise = require('./core.js');
+
+module.exports = Promise;
+Promise.prototype['finally'] = function (f) {
+  return this.then(function (value) {
+    return Promise.resolve(f()).then(function () {
+      return value;
+    });
+  }, function (err) {
+    return Promise.resolve(f()).then(function () {
+      throw err;
+    });
+  });
+};
+
+},{"./core.js":13}],17:[function(require,module,exports){
+'use strict';
+
+module.exports = require('./core.js');
+require('./done.js');
+require('./finally.js');
+require('./es6-extensions.js');
+require('./node-extensions.js');
+require('./synchronous.js');
+
+},{"./core.js":13,"./done.js":14,"./es6-extensions.js":15,"./finally.js":16,"./node-extensions.js":18,"./synchronous.js":19}],18:[function(require,module,exports){
+'use strict';
+
+// This file contains then/promise specific extensions that are only useful
+// for node.js interop
+
+var Promise = require('./core.js');
+var asap = require('asap');
+
+module.exports = Promise;
+
+/* Static Functions */
+
+Promise.denodeify = function (fn, argumentCount) {
+  if (
+    typeof argumentCount === 'number' && argumentCount !== Infinity
+  ) {
+    return denodeifyWithCount(fn, argumentCount);
+  } else {
+    return denodeifyWithoutCount(fn);
+  }
+}
+
+var callbackFn = (
+  'function (err, res) {' +
+  'if (err) { rj(err); } else { rs(res); }' +
+  '}'
+);
+function denodeifyWithCount(fn, argumentCount) {
+  var args = [];
+  for (var i = 0; i < argumentCount; i++) {
+    args.push('a' + i);
+  }
+  var body = [
+    'return function (' + args.join(',') + ') {',
+    'var self = this;',
+    'return new Promise(function (rs, rj) {',
+    'var res = fn.call(',
+    ['self'].concat(args).concat([callbackFn]).join(','),
+    ');',
+    'if (res &&',
+    '(typeof res === "object" || typeof res === "function") &&',
+    'typeof res.then === "function"',
+    ') {rs(res);}',
+    '});',
+    '};'
+  ].join('');
+  return Function(['Promise', 'fn'], body)(Promise, fn);
+}
+function denodeifyWithoutCount(fn) {
+  var fnLength = Math.max(fn.length - 1, 3);
+  var args = [];
+  for (var i = 0; i < fnLength; i++) {
+    args.push('a' + i);
+  }
+  var body = [
+    'return function (' + args.join(',') + ') {',
+    'var self = this;',
+    'var args;',
+    'var argLength = arguments.length;',
+    'if (arguments.length > ' + fnLength + ') {',
+    'args = new Array(arguments.length + 1);',
+    'for (var i = 0; i < arguments.length; i++) {',
+    'args[i] = arguments[i];',
+    '}',
+    '}',
+    'return new Promise(function (rs, rj) {',
+    'var cb = ' + callbackFn + ';',
+    'var res;',
+    'switch (argLength) {',
+    args.concat(['extra']).map(function (_, index) {
+      return (
+        'case ' + (index) + ':' +
+        'res = fn.call(' + ['self'].concat(args.slice(0, index)).concat('cb').join(',') + ');' +
+        'break;'
+      );
+    }).join(''),
+    'default:',
+    'args[argLength] = cb;',
+    'res = fn.apply(self, args);',
+    '}',
+    
+    'if (res &&',
+    '(typeof res === "object" || typeof res === "function") &&',
+    'typeof res.then === "function"',
+    ') {rs(res);}',
+    '});',
+    '};'
+  ].join('');
+
+  return Function(
+    ['Promise', 'fn'],
+    body
+  )(Promise, fn);
+}
+
+Promise.nodeify = function (fn) {
+  return function () {
+    var args = Array.prototype.slice.call(arguments);
+    var callback =
+      typeof args[args.length - 1] === 'function' ? args.pop() : null;
+    var ctx = this;
+    try {
+      return fn.apply(this, arguments).nodeify(callback, ctx);
+    } catch (ex) {
+      if (callback === null || typeof callback == 'undefined') {
+        return new Promise(function (resolve, reject) {
+          reject(ex);
+        });
+      } else {
+        asap(function () {
+          callback.call(ctx, ex);
+        })
+      }
+    }
+  }
+}
+
+Promise.prototype.nodeify = function (callback, ctx) {
+  if (typeof callback != 'function') return this;
+
+  this.then(function (value) {
+    asap(function () {
+      callback.call(ctx, null, value);
+    });
+  }, function (err) {
+    asap(function () {
+      callback.call(ctx, err);
+    });
+  });
+}
+
+},{"./core.js":13,"asap":20}],19:[function(require,module,exports){
+'use strict';
+
+var Promise = require('./core.js');
+
+module.exports = Promise;
+Promise.enableSynchronous = function () {
+  Promise.prototype.isPending = function() {
+    return this.getState() == 0;
+  };
+
+  Promise.prototype.isFulfilled = function() {
+    return this.getState() == 1;
+  };
+
+  Promise.prototype.isRejected = function() {
+    return this.getState() == 2;
+  };
+
+  Promise.prototype.getValue = function () {
+    if (this._81 === 3) {
+      return this._65.getValue();
+    }
+
+    if (!this.isFulfilled()) {
+      throw new Error('Cannot get a value of an unfulfilled promise.');
+    }
+
+    return this._65;
+  };
+
+  Promise.prototype.getReason = function () {
+    if (this._81 === 3) {
+      return this._65.getReason();
+    }
+
+    if (!this.isRejected()) {
+      throw new Error('Cannot get a rejection reason of a non-rejected promise.');
+    }
+
+    return this._65;
+  };
+
+  Promise.prototype.getState = function () {
+    if (this._81 === 3) {
+      return this._65.getState();
+    }
+    if (this._81 === -1 || this._81 === -2) {
+      return 0;
+    }
+
+    return this._81;
+  };
+};
+
+Promise.disableSynchronous = function() {
+  Promise.prototype.isPending = undefined;
+  Promise.prototype.isFulfilled = undefined;
+  Promise.prototype.isRejected = undefined;
+  Promise.prototype.getValue = undefined;
+  Promise.prototype.getReason = undefined;
+  Promise.prototype.getState = undefined;
+};
+
+},{"./core.js":13}],20:[function(require,module,exports){
+"use strict";
+
+// rawAsap provides everything we need except exception management.
+var rawAsap = require("./raw");
+// RawTasks are recycled to reduce GC churn.
+var freeTasks = [];
+// We queue errors to ensure they are thrown in right order (FIFO).
+// Array-as-queue is good enough here, since we are just dealing with exceptions.
+var pendingErrors = [];
+var requestErrorThrow = rawAsap.makeRequestCallFromTimer(throwFirstError);
+
+function throwFirstError() {
+    if (pendingErrors.length) {
+        throw pendingErrors.shift();
+    }
+}
+
+/**
+ * Calls a task as soon as possible after returning, in its own event, with priority
+ * over other events like animation, reflow, and repaint. An error thrown from an
+ * event will not interrupt, nor even substantially slow down the processing of
+ * other events, but will be rather postponed to a lower priority event.
+ * @param {{call}} task A callable object, typically a function that takes no
+ * arguments.
+ */
+module.exports = asap;
+function asap(task) {
+    var rawTask;
+    if (freeTasks.length) {
+        rawTask = freeTasks.pop();
+    } else {
+        rawTask = new RawTask();
+    }
+    rawTask.task = task;
+    rawAsap(rawTask);
+}
+
+// We wrap tasks with recyclable task objects.  A task object implements
+// `call`, just like a function.
+function RawTask() {
+    this.task = null;
+}
+
+// The sole purpose of wrapping the task is to catch the exception and recycle
+// the task object after its single use.
+RawTask.prototype.call = function () {
+    try {
+        this.task.call();
+    } catch (error) {
+        if (asap.onerror) {
+            // This hook exists purely for testing purposes.
+            // Its name will be periodically randomized to break any code that
+            // depends on its existence.
+            asap.onerror(error);
+        } else {
+            // In a web browser, exceptions are not fatal. However, to avoid
+            // slowing down the queue of pending tasks, we rethrow the error in a
+            // lower priority turn.
+            pendingErrors.push(error);
+            requestErrorThrow();
+        }
+    } finally {
+        this.task = null;
+        freeTasks[freeTasks.length] = this;
+    }
+};
+
+},{"./raw":21}],21:[function(require,module,exports){
+(function (global){
+"use strict";
+
+// Use the fastest means possible to execute a task in its own turn, with
+// priority over other events including IO, animation, reflow, and redraw
+// events in browsers.
+//
+// An exception thrown by a task will permanently interrupt the processing of
+// subsequent tasks. The higher level `asap` function ensures that if an
+// exception is thrown by a task, that the task queue will continue flushing as
+// soon as possible, but if you use `rawAsap` directly, you are responsible to
+// either ensure that no exceptions are thrown from your task, or to manually
+// call `rawAsap.requestFlush` if an exception is thrown.
+module.exports = rawAsap;
+function rawAsap(task) {
+    if (!queue.length) {
+        requestFlush();
+        flushing = true;
+    }
+    // Equivalent to push, but avoids a function call.
+    queue[queue.length] = task;
+}
+
+var queue = [];
+// Once a flush has been requested, no further calls to `requestFlush` are
+// necessary until the next `flush` completes.
+var flushing = false;
+// `requestFlush` is an implementation-specific method that attempts to kick
+// off a `flush` event as quickly as possible. `flush` will attempt to exhaust
+// the event queue before yielding to the browser's own event loop.
+var requestFlush;
+// The position of the next task to execute in the task queue. This is
+// preserved between calls to `flush` so that it can be resumed if
+// a task throws an exception.
+var index = 0;
+// If a task schedules additional tasks recursively, the task queue can grow
+// unbounded. To prevent memory exhaustion, the task queue will periodically
+// truncate already-completed tasks.
+var capacity = 1024;
+
+// The flush function processes all tasks that have been scheduled with
+// `rawAsap` unless and until one of those tasks throws an exception.
+// If a task throws an exception, `flush` ensures that its state will remain
+// consistent and will resume where it left off when called again.
+// However, `flush` does not make any arrangements to be called again if an
+// exception is thrown.
+function flush() {
+    while (index < queue.length) {
+        var currentIndex = index;
+        // Advance the index before calling the task. This ensures that we will
+        // begin flushing on the next task the task throws an error.
+        index = index + 1;
+        queue[currentIndex].call();
+        // Prevent leaking memory for long chains of recursive calls to `asap`.
+        // If we call `asap` within tasks scheduled by `asap`, the queue will
+        // grow, but to avoid an O(n) walk for every task we execute, we don't
+        // shift tasks off the queue after they have been executed.
+        // Instead, we periodically shift 1024 tasks off the queue.
+        if (index > capacity) {
+            // Manually shift all values starting at the index back to the
+            // beginning of the queue.
+            for (var scan = 0, newLength = queue.length - index; scan < newLength; scan++) {
+                queue[scan] = queue[scan + index];
+            }
+            queue.length -= index;
+            index = 0;
+        }
+    }
+    queue.length = 0;
+    index = 0;
+    flushing = false;
+}
+
+// `requestFlush` is implemented using a strategy based on data collected from
+// every available SauceLabs Selenium web driver worker at time of writing.
+// https://docs.google.com/spreadsheets/d/1mG-5UYGup5qxGdEMWkhP6BWCz053NUb2E1QoUTU16uA/edit#gid=783724593
+
+// Safari 6 and 6.1 for desktop, iPad, and iPhone are the only browsers that
+// have WebKitMutationObserver but not un-prefixed MutationObserver.
+// Must use `global` instead of `window` to work in both frames and web
+// workers. `global` is a provision of Browserify, Mr, Mrs, or Mop.
+var BrowserMutationObserver = global.MutationObserver || global.WebKitMutationObserver;
+
+// MutationObservers are desirable because they have high priority and work
+// reliably everywhere they are implemented.
+// They are implemented in all modern browsers.
+//
+// - Android 4-4.3
+// - Chrome 26-34
+// - Firefox 14-29
+// - Internet Explorer 11
+// - iPad Safari 6-7.1
+// - iPhone Safari 7-7.1
+// - Safari 6-7
+if (typeof BrowserMutationObserver === "function") {
+    requestFlush = makeRequestCallFromMutationObserver(flush);
+
+// MessageChannels are desirable because they give direct access to the HTML
+// task queue, are implemented in Internet Explorer 10, Safari 5.0-1, and Opera
+// 11-12, and in web workers in many engines.
+// Although message channels yield to any queued rendering and IO tasks, they
+// would be better than imposing the 4ms delay of timers.
+// However, they do not work reliably in Internet Explorer or Safari.
+
+// Internet Explorer 10 is the only browser that has setImmediate but does
+// not have MutationObservers.
+// Although setImmediate yields to the browser's renderer, it would be
+// preferrable to falling back to setTimeout since it does not have
+// the minimum 4ms penalty.
+// Unfortunately there appears to be a bug in Internet Explorer 10 Mobile (and
+// Desktop to a lesser extent) that renders both setImmediate and
+// MessageChannel useless for the purposes of ASAP.
+// https://github.com/kriskowal/q/issues/396
+
+// Timers are implemented universally.
+// We fall back to timers in workers in most engines, and in foreground
+// contexts in the following browsers.
+// However, note that even this simple case requires nuances to operate in a
+// broad spectrum of browsers.
+//
+// - Firefox 3-13
+// - Internet Explorer 6-9
+// - iPad Safari 4.3
+// - Lynx 2.8.7
+} else {
+    requestFlush = makeRequestCallFromTimer(flush);
+}
+
+// `requestFlush` requests that the high priority event queue be flushed as
+// soon as possible.
+// This is useful to prevent an error thrown in a task from stalling the event
+// queue if the exception handled by Node.js’s
+// `process.on("uncaughtException")` or by a domain.
+rawAsap.requestFlush = requestFlush;
+
+// To request a high priority event, we induce a mutation observer by toggling
+// the text of a text node between "1" and "-1".
+function makeRequestCallFromMutationObserver(callback) {
+    var toggle = 1;
+    var observer = new BrowserMutationObserver(callback);
+    var node = document.createTextNode("");
+    observer.observe(node, {characterData: true});
+    return function requestCall() {
+        toggle = -toggle;
+        node.data = toggle;
+    };
+}
+
+// The message channel technique was discovered by Malte Ubl and was the
+// original foundation for this library.
+// http://www.nonblocking.io/2011/06/windownexttick.html
+
+// Safari 6.0.5 (at least) intermittently fails to create message ports on a
+// page's first load. Thankfully, this version of Safari supports
+// MutationObservers, so we don't need to fall back in that case.
+
+// function makeRequestCallFromMessageChannel(callback) {
+//     var channel = new MessageChannel();
+//     channel.port1.onmessage = callback;
+//     return function requestCall() {
+//         channel.port2.postMessage(0);
+//     };
+// }
+
+// For reasons explained above, we are also unable to use `setImmediate`
+// under any circumstances.
+// Even if we were, there is another bug in Internet Explorer 10.
+// It is not sufficient to assign `setImmediate` to `requestFlush` because
+// `setImmediate` must be called *by name* and therefore must be wrapped in a
+// closure.
+// Never forget.
+
+// function makeRequestCallFromSetImmediate(callback) {
+//     return function requestCall() {
+//         setImmediate(callback);
+//     };
+// }
+
+// Safari 6.0 has a problem where timers will get lost while the user is
+// scrolling. This problem does not impact ASAP because Safari 6.0 supports
+// mutation observers, so that implementation is used instead.
+// However, if we ever elect to use timers in Safari, the prevalent work-around
+// is to add a scroll event listener that calls for a flush.
+
+// `setTimeout` does not call the passed callback if the delay is less than
+// approximately 7 in web workers in Firefox 8 through 18, and sometimes not
+// even then.
+
+function makeRequestCallFromTimer(callback) {
+    return function requestCall() {
+        // We dispatch a timeout with a specified delay of 0 for engines that
+        // can reliably accommodate that request. This will usually be snapped
+        // to a 4 milisecond delay, but once we're flushing, there's no delay
+        // between events.
+        var timeoutHandle = setTimeout(handleTimer, 0);
+        // However, since this timer gets frequently dropped in Firefox
+        // workers, we enlist an interval handle that will try to fire
+        // an event 20 times per second until it succeeds.
+        var intervalHandle = setInterval(handleTimer, 50);
+
+        function handleTimer() {
+            // Whichever timer succeeds will cancel both timers and
+            // execute the callback.
+            clearTimeout(timeoutHandle);
+            clearInterval(intervalHandle);
+            callback();
+        }
+    };
+}
+
+// This is for `asap.js` only.
+// Its name will be periodically randomized to break any code that depends on
+// its existence.
+rawAsap.makeRequestCallFromTimer = makeRequestCallFromTimer;
+
+// ASAP was originally a nextTick shim included in Q. This was factored out
+// into this ASAP package. It was later adapted to RSVP which made further
+// amendments. These decisions, particularly to marginalize MessageChannel and
+// to capture the MutationObserver implementation in a closure, were integrated
+// back into ASAP proper.
+// https://github.com/tildeio/rsvp.js/blob/cddf7232546a9cf858524b75cde6f9edf72620a7/lib/rsvp/asap.js
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{}],22:[function(require,module,exports){
 function E () {
 	// Keep this empty so it's easier to inherit from
   // (via https://github.com/lipsmack from https://github.com/scottcorgan/tiny-emitter/issues/3)
@@ -3598,7 +4472,7 @@ E.prototype = {
 
 module.exports = E;
 
-},{}],13:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 module.exports = {
   "default_locale":"en",
   "languages":[
@@ -3613,7 +4487,7 @@ module.exports = {
   "threshold":1,
   "css":".tml_not_translated { border-bottom: 1px dotted red; } .tml_translated { border-bottom: 1px dotted green; } .tml_fallback { border-bottom: 1px dotted #e90; } .tml_pending { border-bottom: 1px dotted #e90; } .tml_locked { border-bottom: 1px dotted blue; } .tml_language_case { padding:0px 2px; border: 1px dotted blue; border-radius: 2px; } .tml_token { background: #eee; padding:0px 2px; border: 1px dotted #ccc; border-radius: 2px; color: black; }"
 };
-},{}],14:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 module.exports = {
 
   enabled: true,
@@ -3778,7 +4652,7 @@ module.exports = {
   }
 
 };
-},{}],15:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 module.exports = {
   "locale": "en",
   "english_name": "English",
@@ -5119,7 +5993,7 @@ module.exports = {
     }
   }
 };
-},{}],16:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -5169,9 +6043,8 @@ Base.prototype = {
    *
    * @param url
    * @param params
-   * @param callback
    */
-  get: function(url, params, callback){
+  get: function(url, params){
     throw new Error("Must be implemented by the extending class");
   },
 
@@ -5180,16 +6053,15 @@ Base.prototype = {
    *
    * @param url
    * @param params
-   * @param callback
    */
-  post: function(url, params, callback) {
+  post: function(url, params) {
     throw new Error("Must be implemented by the extending class");
   }
 
 };
 
 module.exports = Base;
-},{}],17:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -5225,8 +6097,17 @@ var logger = require("./logger");
 var utils = require("./utils");
 var config = require("./configuration");
 var BaseAdapter = require('./api_adapters/base');
+var promise = require('promise');
 
 var API_PATH = "/v1/";
+
+var parseOrReject = function (body) {
+  try {
+    return JSON.parse(body);
+  } catch (e) {
+    return promise.reject(e);
+  }
+}
 
 /**
  * API Client
@@ -5250,134 +6131,112 @@ ApiClient.prototype = {
    * @param path
    * @param params
    * @param options
-   * @param callback
-   * @returns {{path: *, params: *, options: (*|{}), callback: *}}
+   * @returns {{path: *, params: *, options: (*|{})}}
    */
-  normalizeParams: function (path, params, options, callback) {
-    if (utils.isFunction(params)) {
-      callback = params;
-      params = {};
-    } else if (utils.isFunction(options)) {
-      callback = options;
-      options = {};
-    }
+  normalizeParams: function (path, params, options) {
     options = options || {};
-    return {path: path, params: params, options: options, callback: callback};
+    return {path: path, params: params, options: options};
   },
 
   /**
    * Gets the latest release version from the CDN
-   * @param callback
    */
-  getReleaseVersion: function (callback) {
+  getReleaseVersion: function () {
     var self = this;
     var t = new Date().getTime();
 
     var url = this.application.getCdnHost() + "/" + this.application.key + "/version.json";
 
-    self.adapter.get(url, {t: t}, function (error, response, data) {
-      if (response.status == 403 || error || !data) {
-        callback('0');
-      } else {
-        try {
-          data = JSON.parse(data);
-          callback(data.version);
-        } catch (err) {
-          callback('0');
-        }
-      }
-    });
+    return self.adapter.get(url, {t: t})
+        .then(function (data) {
+          return JSON.parse(data).version;
+        })
+        .catch(function (err) {
+          return 0;
+        });
   },
 
   /**
    * Pulls the latest release and update it in the cache
-   * @param callback
    */
-  updateReleaseVersion: function (current_version, callback) {
+  updateReleaseVersion: function (current_version) {
     var self = this;
-    self.getReleaseVersion(function (new_version) {
-      self.cache.storeVersion(new_version, function (updated_version) {
-        if (current_version != updated_version) {
-          logger.debug("Changing version from " + current_version + " to " + updated_version);
-          self.cache.clear();
-        }
-        callback(updated_version);
-      });
-    });
+    return self.getReleaseVersion()
+        .then(function (new_version) {
+          return self.cache.storeVersion(new_version)
+              .then(function (updated_version) {
+                if (current_version != updated_version) {
+                  logger.debug("Changing version from " + current_version + " to " + updated_version);
+                  self.cache.clear();
+                }
+                return updated_version;
+              });
+        });
   },
 
   /**
    * Checks local cache first, if the release is undefined, get it and update the local cache
-   * @param callback
    */
-  getCacheVersion: function (callback) {
+  getCacheVersion: function () {
     // check version in the memory cache first
     if (this.cache.version && this.cache.version != 'undefined') {
-      callback(this.cache.version);
-      return;
+      return promise.resolve(this.cache.version);
     }
 
     var self = this;
 
     // get version from local cache
-    this.cache.fetchVersion(function (version_data) {
-
-      // check timestamp for the version
-      var needs_version_check = false;
-      if (version_data.t) {
-        var expires_at = version_data.t + self.cache.getVersionCheckInterval();
-        var now = new Date().getTime();
-        if (expires_at < now) {
-          logger.debug("Cache version is outdated and needs a refresh now");
-          needs_version_check = true;
+    return this.cache.fetchVersion()
+      .then(function (version_data) {
+        // check timestamp for the version
+        var needs_version_check = false;
+        if (version_data.t) {
+          var expires_at = version_data.t + self.cache.getVersionCheckInterval();
+          var now = new Date().getTime();
+          if (expires_at < now) {
+            logger.debug("Cache version is outdated and needs a refresh now");
+            needs_version_check = true;
+          } else {
+            var delta = Math.round((expires_at - now) / 1000);
+            logger.debug("Cache version is up to date, will be checked in: " + delta + "s");
+          }
         } else {
-          var delta = Math.round((expires_at - now) / 1000);
-          logger.debug("Cache version is up to date, will be checked in: " + delta + "s");
+          logger.debug("Cache version has no timestamp, needs a refresh");
+          needs_version_check = true;
         }
-      } else {
-        logger.debug("Cache version has no timestamp, needs a refresh");
-        needs_version_check = true;
-      }
-
-      //logger.debug(version_data);
-
-      if (needs_version_check) {
-        // update local cache version from CDN
-        self.updateReleaseVersion(version_data.version, function (new_version) {
-          callback(new_version);
-        });
-      } else {
-        // if version is defined in the cache use it.
-        self.cache.setVersion(version_data.version);
-        callback(version_data.version);
-      }
-    });
+  
+        //logger.debug(version_data);
+        if (needs_version_check) {
+          // update local cache version from CDN
+          return self.updateReleaseVersion(version_data.version);
+        } else {
+          // if version is defined in the cache use it.
+          self.cache.setVersion(version_data.version);
+          return promise.resolve(version_data.version);
+        }
+      });
   },
 
   /**
    * Fetches data from CDN
    *
    * @param key
-   * @param callback
    */
-  fetchFromCdn: function (key, callback) {
+  fetchFromCdn: function (key) {
     var self = this;
 
     if (self.cache.version == '0') {
-      callback(null, null);
-      return;
+      return promise.resolve(null);
     }
 
     var cdn_url = this.application.getCdnHost() + "/" + this.application.key + "/" + this.cache.version + utils.normalizePath(key) + ".json";
-    self.adapter.get(cdn_url, {}, function (error, response, data) {
-      if (!data || data.match(/xml/)) error = 'Not found';
-
-      if (error || !data) {
-        callback(error, null);
-      } else {
-        callback(null, data);
-      }
-    });
+    return self.adapter.get(cdn_url, {})
+        .then(function (data) {
+          if (!data || data.match(/xml/)) 
+            throw new Error('Not found');
+          
+          return data;
+      });
   },
 
   /**
@@ -5386,12 +6245,11 @@ ApiClient.prototype = {
    * @param path
    * @param params
    * @param options
-   * @param callback
    */
-  get: function (path, params, options, callback) {
-    var opts = this.normalizeParams(path, params, options, callback);
+  get: function (path, params, options) {
+    var opts = this.normalizeParams(path, params, options);
     opts.options.method = "get";
-    this.api(opts.path, opts.params, opts.options, opts.callback);
+    return this.api(opts.path, opts.params, opts.options);
   },
 
   /**
@@ -5400,12 +6258,11 @@ ApiClient.prototype = {
    * @param path
    * @param params
    * @param options
-   * @param callback
    */
-  post: function (path, params, options, callback) {
-    var opts = this.normalizeParams(path, params, options, callback);
+  post: function (path, params, options) {
+    var opts = this.normalizeParams(path, params, options);
     opts.options.method = "post";
-    this.api(opts.path, opts.params, opts.options, opts.callback);
+    return this.api(opts.path, opts.params, opts.options);
   },
 
   isLiveApiRequest: function() {
@@ -5424,62 +6281,45 @@ ApiClient.prototype = {
    * @param path
    * @param params
    * @param options
-   * @param callback
    */
-  api: function (path, params, options, callback) {
+  api: function (path, params, options) {
     utils.extend(params, {access_token: this.application.token});
 
     var url = this.application.getHost() + API_PATH + path;
     var self = this;
-
-    var request_callback = function (error, response, body) {
-      if (!error && body) {
-        callback(error, JSON.parse(body));
-      } else {
-        callback(error, body);
-      }
-    };
-
+    
     if (self.isLiveApiRequest()) {
       if (options.method == "post") {
-        self.adapter.post(url, params, request_callback);
+        return self.adapter.post(url, params)
+            .then(parseOrReject);
       } else {
-        self.adapter.get(url, params, request_callback);
+        return self.adapter.get(url, params)
+            .then(parseOrReject);
       }
-      return;
     }
 
     if (!self.isCacheEnabled(options)) {
-      request_callback('Cache is disabled');
-      return;
+      return promise.reject('Cache is disabled');
     }
 
-    self.getCacheVersion(function (version) {
-      if (parseInt(version) === 0) {
-        request_callback('No release has been published');
-      } else {
-        self.cache.fetch(options.cache_key, function (cache_callback) {
-          self.fetchFromCdn(options.cache_key, cache_callback);
-        }, function (error, data) {
-          if (!error && data) {
-            try {
-              data = JSON.parse(data);
-            } catch (e) {
-              return callback(e);
-            }
-            callback(null, data);
-          } else
-            callback(error);
+    return self.getCacheVersion()
+        .then(function (version) {
+          if (parseInt(version) === 0) {
+            return promise.reject(new Error('No release has been published'));
+          } else {
+            return self.cache.fetch(options.cache_key, function () {
+              return self.fetchFromCdn(options.cache_key);
+            })
+            .then(parseOrReject);
+          }
         });
-      }
-    });
   }
 
 };
 
 module.exports = ApiClient;
 
-},{"./api_adapters/base":16,"./configuration":21,"./logger":29,"./utils":44}],18:[function(require,module,exports){
+},{"./api_adapters/base":26,"./configuration":31,"./logger":39,"./utils":54,"promise":55}],28:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -5514,6 +6354,7 @@ module.exports = ApiClient;
 var utils       = require("./utils");
 var config      = require("./configuration");
 var logger      = require('./logger');
+var promise     = require('promise');
 
 var Language    = require("./language");
 var Source      = require("./source");
@@ -5603,15 +6444,15 @@ Application.prototype = {
    * changes current language
    *
    * @param locale
-   * @param callback
    */
-  changeLanguage: function(locale, callback) {
+  changeLanguage: function(locale) {
     var self = this;
     self.current_locale = locale;
     self.sources_by_key = {};
-    this.initData([self.current_locale], [self.current_source], function() {
-      if (callback) callback(self.getLanguage(self.current_locale));
-    });
+    return this.initData([locale], [self.current_source])
+        .then(function () {
+          return self.getLanguage(self.current_locale); 
+        });
   },
 
   /**
@@ -5655,7 +6496,6 @@ Application.prototype = {
    */
   addSource: function(source, locale, translations) {
     if (!source) return;
-
     source = new Source({source: source});
     source.application = this;
     source.updateTranslations(locale, translations);
@@ -5715,9 +6555,8 @@ Application.prototype = {
    * Initializes the application
    *
    * @param options
-   * @param callback
    */
-  init: function(options, callback) {
+  init: function(options) {
     options = options || {};
 
     var self = this;
@@ -5729,52 +6568,47 @@ Application.prototype = {
       self.current_source = self.current_source();
     }
 
-    self.getApiClient().get("projects/" + self.key + "/definition", {
+    var params = {
       locale: options.current_locale || (options.accepted_locales ? options.accepted_locales.join(',') : 'en'),
       source: self.current_source,
       ignored: true
-    }, {
-        cache_key: 'application'
-    }, function (err, data) {
+    };
+    self.default_locale = self.default_locale || "en";
+    return self.getApiClient().get("projects/" + self.key + "/definition", params, { cache_key: 'application' })
+        .catch(function (err) {
+          self.extend(config.getDefaultApplication());
+          self.addLanguage(config.getDefaultLanguage());
+          throw err;
+        })
+        .then(function (data) {
+          self.extend(data);
 
-      self.default_locale = self.default_locale || "en";
+          if (data.settings) {
+            utils.merge(config, data.settings);
+          }
 
-      // missing release
-      if (err) {
-        self.extend(config.getDefaultApplication());
-        self.addLanguage(config.getDefaultLanguage());
-        callback(null);
-        return;
-      }
+          self.loadExtension(data);
 
-      self.extend(data);
+          self.current_locale = (
+              options.current_locale ||
+              self.getPreferredLocale(options.accepted_locales, self.languages) ||
+              self.default_locale
+          );
 
-      if (data.settings) {
-        utils.merge(config, data.settings);
-      }
+          if (!self.isSupportedLocale(self.current_locale)) {
+            self.current_locale = self.default_locale;
+          }
 
-      self.loadExtension(data);
+          var locales = [self.default_locale];
+          if (self.current_locale != self.default_locale) {
+            locales.push(self.current_locale);
+          }
 
-      self.current_locale = (
-        options.current_locale ||
-        self.getPreferredLocale(options.accepted_locales, self.languages) ||
-        self.default_locale
-      );
+          //console.log("Current locale: ", self.current_locale);
 
-      if (!self.isSupportedLocale(self.current_locale)) {
-        self.current_locale = self.default_locale;
-      }
-
-      var locales = [self.default_locale];
-      if (self.current_locale != self.default_locale) {
-        locales.push(self.current_locale);
-      }
-
-      //console.log("Current locale: ", self.current_locale);
-
-      var sources = [self.current_source || 'index'];
-      self.initData(locales, sources, callback);
-    });
+          var sources = [self.current_source || 'index'];
+          return self.initData(locales, sources);
+        }); 
   },
 
   /**
@@ -5828,25 +6662,26 @@ Application.prototype = {
    *
    * @param locales
    * @param sources
-   * @param callback
    */
-  initData: function(locales, sources, callback) {
+  initData: function(locales, sources) {
     var self = this;
 
     // init languages
-    self.loadLanguages(locales, function() {
-      if (sources) {
-        // init main source
-        self.loadSources(sources, self.current_locale, function(sources) {
-          // init all sub-sources
-          if (sources.length > 0 && sources[0] && sources[0].sources && sources[0].sources.length > 0) {
-            // logger.log("Loading subsources: " + sources[0].sources);
-            self.loadSources(sources[0].sources, self.current_locale, function (sources) {
-              callback(null);
-            });
-          } else callback(null);
-        });
-      } else callback(null);
+    var languagesLoad = self.loadLanguages(locales);
+    if (!sources || !sources.length)
+        return languagesLoad;
+    
+    return languagesLoad
+        .then(function(languages) {
+          // init main source
+          return self.loadSources(sources, self.current_locale)
+              .then(function(loadedSources) {
+                // init all sub-loadedSources
+                if (loadedSources.length > 0 && loadedSources[0] && loadedSources[0].sources && loadedSources[0].sources.length > 0) {
+                  return self.loadSources(loadedSources[0].sources, self.current_locale);
+                }
+                return loadedSources;
+          });
     });
   },
 
@@ -5874,38 +6709,19 @@ Application.prototype = {
    * Loads languages
    *
    * @param locales
-   * @param languages_callback
    */
-  loadLanguages: function(locales, languages_callback) {
-    var data = {};
+  loadLanguages: function(locales) {
     var self = this;
 
-    locales.forEach(function(locale) {
-      if (!self.languages_by_locale[locale]) {
-        data[locale] = function (callback) {
-          self.getApiClient().get("languages/" + locale + "/definition", {}, {cache_key: self.getLanguageKey(locale)}, function (error, data) {
-            if (error) {
-              callback(error, null);
-              return;
-            }
-            callback(null, new Language(utils.extend(data, {application: self})));
+    var loadingLanguages = locales.map(function (locale) {
+      return self.getApiClient().get("languages/" + locale + "/definition", {}, 
+          {cache_key: self.getLanguageKey(locale)})
+          .then(function (langData) {
+            return self.addLanguage(new Language(utils.extend(langData, {application: self})));
           });
-        };
-      }
     });
-
-    utils.parallel(data, function(err, results) {
-      if (err) {
-        console.log(err);
-        throw err;
-      }
-
-      Object.keys(results).forEach(function(key) {
-        self.addLanguage(results[key]);
-      });
-
-      languages_callback();
-    });
+    
+    return promise.all(loadingLanguages);
   },
 
   /**
@@ -5938,55 +6754,33 @@ Application.prototype = {
    *
    * @param sources
    * @param locale
-   * @param sources_callback
    */
-  loadSources: function(sources, locale, sources_callback) {
-    var data = {};
+  loadSources: function(sources, locale) {
+    //var data = {};
     var self = this;
 
-    sources.forEach(function(source) {
+    var loadingSources = sources.map(function (source) {
       source = self.getSourceName(source);
       if (!self.sources_by_key[source]) {
-        data[source] = function(callback) {
-
-          var key = utils.generateSourceKey(source);
-          self.getApiClient().get("sources/" + key + '/translations', {
-            locale: locale,
-            ignored: true,
-            all: true,
-            app_id: self.key
-          }, {
-            cache_key: locale + '/sources' + utils.normalizePath(source)
-          }, function(error, data) {
-            if (error) {
-              callback(error, null);
-              return;
-            }
-
-            callback(null, data);
-          });
-        };
-      }
-    });
-
-    utils.parallel(data, function(err, results) {
-      var sources = [];
-
-      if (results) {
-        Object.keys(results).forEach(function (key) {
-          sources.push(results[key]);
-          self.addSource(key, locale, results[key]);
+        var key = utils.generateSourceKey(source);
+        return self.getApiClient().get("sources/" + key + '/translations', {
+          locale: locale,
+          ignored: true,
+          all: true,
+          app_id: self.key
+        }, {
+          cache_key: locale + '/sources' + utils.normalizePath(source)
+        }).then(function (sourceData) {
+          self.addSource(source, locale, sourceData);
+          return sourceData;
         });
       }
-
-      sources_callback(sources);
     });
+
+    return promise.all(loadingSources.filter(Boolean))
   },
 
   isInlineModeEnabled: function() {
-    // TODO: ensure that if token is provided in the initial settings - application token
-    // we should still be able to submit missing keys
-
     if (!this.current_translator) return false;
     return this.current_translator.inline;
   },
@@ -6029,12 +6823,9 @@ Application.prototype = {
 
   /**
    * Submits missing keys to the server
-   *
-   * @param callback
    */
-  submitMissingTranslationKeys: function(callback) {
+  submitMissingTranslationKeys: function() {
     if (!this.missing_keys_by_source) {
-      if (callback) callback(false);
       return;
     }
 
@@ -6042,13 +6833,11 @@ Application.prototype = {
     // in inline translation mode
 
     if (!this.isInlineModeEnabled()) {
-      if (callback) callback(false);
       return;
     }
 
     var source_keys = utils.keys(this.missing_keys_by_source);
     if (source_keys.length === 0) {
-      if (callback) callback(false);
       return;
     }
 
@@ -6077,31 +6866,21 @@ Application.prototype = {
 
     var self = this;
     self.missing_keys_by_source = null;
-
-    this.getApiClient().post("sources/register_keys", {source_keys: JSON.stringify(params), app_id: self.key}, function () {
-      utils.keys(self.languages_by_locale).forEach(function (locale) {
-        source_keys.forEach(function (source_key) {
-          // delete from cache source_key + locale
-          source_key = source_key.split(config.source_separator);
-          source_key.forEach(function (source) {
-            // console.log("Removing " + locale + '/sources/' + source + " from cache");
-            // TODO: may not need to remove all sources in path from the cache
-            self.removeSource(source);
-            config.getCache().del(locale + '/sources/' + source, function () {});
+    return this.getApiClient().post("sources/register_keys", {source_keys: JSON.stringify(params), app_id: self.key})
+        .then(function () {
+          utils.keys(self.languages_by_locale).forEach(function (locale) {
+            source_keys.forEach(function (source_key) {
+              // delete from cache source_key + locale
+              source_key = source_key.split(config.source_separator);
+              source_key.forEach(function (source) {
+                // console.log("Removing " + locale + '/sources/' + source + " from cache");
+                // TODO: may not need to remove all sources in path from the cache
+                self.removeSource(source);
+                config.getCache().del(locale + '/sources/' + source, function () {});
+              });
+            });
           });
         });
-      });
-
-      if (false && config.delayed_flush) {
-        if (self.missing_keys_by_source) {
-          self.submit_scheduled = true;
-          self.submitMissingTranslationKeys(callback);
-        } else {
-          self.submit_scheduled = false;
-          if (callback) callback(true);
-        }
-      } else if (callback) callback(true);
-    });
   },
 
   /**
@@ -6143,7 +6922,7 @@ Application.prototype = {
 
 module.exports = Application;
 
-},{"./api_client":17,"./configuration":21,"./language":24,"./logger":29,"./source":33,"./utils":44}],19:[function(require,module,exports){
+},{"./api_client":27,"./configuration":31,"./language":34,"./logger":39,"./source":43,"./utils":54,"promise":55}],29:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -6176,6 +6955,7 @@ module.exports = Application;
  */
 
 var utils        = require("./utils");
+var promise      = require('promise');
 var BaseAdapter  = require('./cache_adapters/base');
 
 var Cache = function(options) {
@@ -6210,22 +6990,24 @@ Cache.prototype = {
    *
    * @param key
    * @param fallback
-   * @param callback
    */
-  fetch: function(key, fallback, callback) {
+  fetch: function(key, fallback) {
     if (!this.adapter) {
+
       if (utils.isFunction(fallback)) {
-        fallback(function(err, data) {
-          if (data) {
-            callback(null, data);
-          } else callback("no data", null);
-        }.bind(this));
+        return fallback()
+            .then(function(data) {
+              if (data) {
+                return data;
+              }
+              else
+                throw new Error("no data");
+            });
       } else {
-          callback(null, fallback);
+        return fallback;
       }
-      return;
     }
-    this.adapter.fetch(key, fallback, callback);
+    return this.adapter.fetch(key, fallback);
   },
 
   /**
@@ -6233,70 +7015,59 @@ Cache.prototype = {
    *
    * @param key
    * @param value
-   * @param callback
    */
-  store: function(key, value, callback) {
+  store: function(key, value) {
     if (!this.adapter) {
-      if (utils.isFunction(callback)) callback();
-      return;
+      return promise.resolve();
     }
-    this.adapter.store(key, value, callback);
+    return this.adapter.store(key, value);
   },
 
   /**
    * Deletes data from cache
    *
    * @param key
-   * @param callback
    */
-  del: function(key, callback) {
+  del: function(key) {
     if (!this.adapter) {
-      callback();
-      return;
+      return promise.resolve();
     }
-    this.adapter.del(key, callback);
+    return this.adapter.del(key);
   },
 
   /**
    * Checks if data exists in the cache
    *
    * @param key
-   * @param callback
    */
-  exists: function(key, callback) {
+  exists: function(key) {
     if (!this.adapter) {
-      callback();
-      return;
+      return promise.resolve();
     }
-    this.adapter.exists(key, callback);
+    return this.adapter.exists(key);
   },
 
   /**
    * Fetches current release version
-   *
-   * @param callback
    */
-  fetchVersion: function(callback) {
+  fetchVersion: function() {
     if (!this.adapter) {
-      callback({version: this.options.version || '0'});
-      return;
+      return promise.resolve({version: this.options.version || '0'});
     }
-    this.adapter.fetchVersion(callback);
+    return this.adapter.fetchVersion();
   },
 
   /**
    * Stores release version in local cache
    *
    * @param version
-   * @param callback
    */
-  storeVersion: function(version, callback) {
+  storeVersion: function(version) {
     this.version = version;
     if (!this.adapter) {
-      if (callback) callback(version);
-      return;
+      return promise.resolve(version);
     }
-    this.adapter.storeVersion(version, callback);
+    return this.adapter.storeVersion(version);
   },
 
   /**
@@ -6332,19 +7103,17 @@ Cache.prototype = {
   /**
    * Clears cache
    *
-   * @param callback
    */
-  clear: function(callback) {
+  clear: function() {
     if (!this.adapter) {
-      if (callback) callback();
-      return;
+      return promise.resolve();
     }
-    this.adapter.clear(callback);
+    return this.adapter.clear();
   }
 };
 
 module.exports = Cache;
-},{"./cache_adapters/base":20,"./configuration":21,"./utils":44}],20:[function(require,module,exports){
+},{"./cache_adapters/base":30,"./configuration":31,"./utils":54,"promise":55}],30:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -6379,6 +7148,7 @@ module.exports = Cache;
 var config      = require('../configuration');
 var logger      = require('../logger');
 var utils       = require('../utils');
+var promise     = require('promise');
 
 var VERSION_KEY  = 'current_version';
 var KEY_PREFIX   = 'tml';
@@ -6441,45 +7211,45 @@ Base.prototype = {
     return key + '.json';
   },
 
-  fetchDefault: function(key, fallback, callback) {
+  fetchDefault: function(key, fallback) {
     var self = this;
     if (utils.isFunction(fallback)) {
-      fallback(function(err, data) {
-        if (data) {
-          self.store(key, data, function () {
-            callback(null, data);
-          });
-        } else callback("no data", null);
-      }.bind(this));
+      return fallback()
+        .then(function(data) {
+          if (data) {
+            return self.store(key, data);
+          } 
+          else 
+            throw new Error("no data");
+        });
     } else if (fallback) {
-      self.store(key, fallback, function(err, data) {
-        callback(null, data);
-      });
+      return self.store(key, fallback);
     }
   },
 
   // pulls current stored version from cache
-  fetchVersion: function(callback) {
+  fetchVersion: function() {
     var self = this;
 
     if (self.config.version) {
       self.info("Cache version from config: " + self.config.version);
-      callback(self.config.version);
+      return promise.resolve(self.config.version);
     } else {
       var default_version = JSON.stringify({version: "undefined"});
-      self.fetch(VERSION_KEY, default_version, function (err, data) {
-        data = data || '';
-        if (data.indexOf('{') != -1)
-          data = JSON.parse(data);
-        else
-          data = {version: data};
-        self.info("Cache version: " + data.version);
-        callback(data);
-      });
+      return self.fetch(VERSION_KEY, default_version)
+          .then(function (data) {
+            data = data || '';
+            if (data.indexOf('{') != -1)
+              data = JSON.parse(data);
+            else
+              data = {version: data};
+            self.info("Cache version: " + data.version);
+            return data;
+          });
     }
   },
 
-  storeVersion: function(version, callback) {
+  storeVersion: function(version) {
     var self = this;
     self.version = version;
 
@@ -6487,9 +7257,10 @@ Base.prototype = {
     var version_data = JSON.stringify({version: self.version, t: self.getVersionTimestamp()});
     //logger.debug("Storing version data " + version_data);
 
-    self.store(VERSION_KEY, version_data, function() {
-      if (callback) callback(self.version);
-    });
+    return self.store(VERSION_KEY, version_data)
+        .then(function() {
+          return self.version;
+        });
   },
 
   /**
@@ -6548,13 +7319,13 @@ Base.prototype = {
    *
    * @param callback
    */
-  clear: function(callback) {
-    if (callback) callback(null);
+  clear: function() {
+    return promise.resolve(null);
   }
 };
 
 module.exports = Base;
-},{"../configuration":21,"../logger":29,"../utils":44}],21:[function(require,module,exports){
+},{"../configuration":31,"../logger":39,"../utils":54,"promise":55}],31:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -6806,7 +7577,7 @@ module.exports = new Configuration();
 
 
 
-},{"./../config/application.js":13,"./../config/defaults.js":14,"./../config/english.js":15,"./cache":19,"./utils":44}],22:[function(require,module,exports){
+},{"./../config/application.js":23,"./../config/defaults.js":24,"./../config/english.js":25,"./cache":29,"./utils":54}],32:[function(require,module,exports){
 (function (Buffer){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
@@ -6980,7 +7751,7 @@ module.exports = HTMLDecorator;
 
 
 }).call(this,require("buffer").Buffer)
-},{"../utils":44,"buffer":8}],23:[function(require,module,exports){
+},{"../utils":54,"buffer":8}],33:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -7101,7 +7872,7 @@ module.exports = {
   language_flag_tag: scripts.language_flag_tag,
   language_selector: scripts.language_selector_tag
 };
-},{}],24:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -7271,7 +8042,7 @@ Language.prototype = {
 
 module.exports = Language;
 
-},{"./configuration":21,"./language_case":25,"./language_context":27,"./translation_key":42,"./utils":44}],25:[function(require,module,exports){
+},{"./configuration":31,"./language_case":35,"./language_context":37,"./translation_key":52,"./utils":54}],35:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -7388,7 +8159,7 @@ LanguageCase.prototype = {
 module.exports = LanguageCase;
 
 
-},{"./configuration":21,"./decorators/html":22,"./language_case_rule":26,"./utils":44}],26:[function(require,module,exports){
+},{"./configuration":31,"./decorators/html":32,"./language_case_rule":36,"./utils":54}],36:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -7487,7 +8258,7 @@ LanguageCaseRule.prototype = {
 
 module.exports = LanguageCaseRule;
 
-},{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":44}],27:[function(require,module,exports){
+},{"./rules_engine/evaluator":41,"./rules_engine/parser":42,"./utils":54}],37:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -7606,7 +8377,7 @@ LanguageContext.prototype = {
 };
 
 module.exports = LanguageContext;
-},{"./configuration":21,"./language_context_rule":28,"./utils":44}],28:[function(require,module,exports){
+},{"./configuration":31,"./language_context_rule":38,"./utils":54}],38:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -7677,7 +8448,7 @@ LanguageContextRule.prototype = {
 };
 
 module.exports = LanguageContextRule;
-},{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":44}],29:[function(require,module,exports){
+},{"./rules_engine/evaluator":41,"./rules_engine/parser":42,"./utils":54}],39:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -7743,7 +8514,7 @@ var Logger = {
 };
 
 module.exports = Logger;
-},{"./configuration":21,"./utils":44}],30:[function(require,module,exports){
+},{"./configuration":31,"./utils":54}],40:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -7986,7 +8757,7 @@ var MD5 = function (string) {
 };
 
 module.exports = MD5;
-},{}],31:[function(require,module,exports){
+},{}],41:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -8177,7 +8948,7 @@ Evaluator.prototype = {
 
 module.exports = Evaluator;
 
-},{}],32:[function(require,module,exports){
+},{}],42:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -8237,7 +9008,7 @@ Parser.prototype = {
 };
 
 module.exports = Parser;
-},{}],33:[function(require,module,exports){
+},{}],43:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -8333,7 +9104,7 @@ Source.prototype = {
 };
 
 module.exports = Source;
-},{"./configuration":21,"./translation":41,"./utils":44}],34:[function(require,module,exports){
+},{"./configuration":31,"./translation":51,"./utils":54}],44:[function(require,module,exports){
 
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
@@ -8422,7 +9193,7 @@ module.exports = Tml;
 
 
 
-},{"./api_adapters/base":16,"./application":18,"./cache_adapters/base":20,"./configuration":21,"./helpers/scripts":23,"./language":24,"./language_case":25,"./language_case_rule":26,"./language_context":27,"./language_context_rule":28,"./logger":29,"./source":33,"./tokenizers/dom":37,"./translation":41,"./translation_key":42,"./translator":43,"./utils":44}],35:[function(require,module,exports){
+},{"./api_adapters/base":26,"./application":28,"./cache_adapters/base":30,"./configuration":31,"./helpers/scripts":33,"./language":34,"./language_case":35,"./language_case_rule":36,"./language_context":37,"./language_context_rule":38,"./logger":39,"./source":43,"./tokenizers/dom":47,"./translation":51,"./translation_key":52,"./translator":53,"./utils":54}],45:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -8514,7 +9285,7 @@ DataTokenizer.prototype = {
 };
 
 module.exports = DataTokenizer;
-},{"../configuration":21,"../tokens/data":38,"../tokens/method":39,"../tokens/piped":40}],36:[function(require,module,exports){
+},{"../configuration":31,"../tokens/data":48,"../tokens/method":49,"../tokens/piped":50}],46:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -8714,7 +9485,7 @@ DecorationTokenizer.prototype = {
 
 
 module.exports = DecorationTokenizer;
-},{"../configuration":21,"../utils":44}],37:[function(require,module,exports){
+},{"../configuration":31,"../utils":54}],47:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -9192,7 +9963,7 @@ DomTokenizer.prototype = {
 };
 
 module.exports = DomTokenizer;
-},{"../configuration":21,"../utils":44}],38:[function(require,module,exports){
+},{"../configuration":31,"../utils":54}],48:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -9610,7 +10381,7 @@ DataToken.prototype = {
 };
 
 module.exports = DataToken;
-},{"../configuration":21,"../decorators/html":22,"../logger":29,"../utils":44}],39:[function(require,module,exports){
+},{"../configuration":31,"../decorators/html":32,"../logger":39,"../utils":54}],49:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -9701,7 +10472,7 @@ MethodToken.prototype.getDecorationName = function() {
 module.exports = MethodToken;
 
 
-},{"../decorators/html":22,"../utils":44,"./data":38}],40:[function(require,module,exports){
+},{"../decorators/html":32,"../utils":54,"./data":48}],50:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -9967,7 +10738,7 @@ PipedToken.prototype.getDecorationName = function() {
 module.exports = PipedToken;
 
 
-},{"../decorators/html":22,"../utils":44,"./data":38}],41:[function(require,module,exports){
+},{"../decorators/html":32,"../utils":54,"./data":48}],51:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -10059,7 +10830,7 @@ module.exports = Translation;
 
 
 
-},{"./tokens/data":38,"./utils":44}],42:[function(require,module,exports){
+},{"./tokens/data":48,"./utils":54}],52:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -10254,7 +11025,7 @@ TranslationKey.prototype = {
 module.exports = TranslationKey;
 
 
-},{"./configuration":21,"./decorators/html":22,"./tokenizers/data":35,"./tokenizers/decoration":36,"./translation":41,"./utils":44}],43:[function(require,module,exports){
+},{"./configuration":31,"./decorators/html":32,"./tokenizers/data":45,"./tokenizers/decoration":46,"./translation":51,"./utils":54}],53:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -10308,7 +11079,7 @@ Translator.prototype = {
 
 module.exports = Translator;
 
-},{"./utils":44}],44:[function(require,module,exports){
+},{"./utils":54}],54:[function(require,module,exports){
 (function (Buffer){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
@@ -10663,4 +11434,24 @@ module.exports = {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"./md5":30,"buffer":8}]},{},[6]);
+},{"./md5":40,"buffer":8}],55:[function(require,module,exports){
+arguments[4][12][0].apply(exports,arguments)
+},{"./lib":60,"dup":12}],56:[function(require,module,exports){
+arguments[4][13][0].apply(exports,arguments)
+},{"asap/raw":64,"dup":13}],57:[function(require,module,exports){
+arguments[4][14][0].apply(exports,arguments)
+},{"./core.js":56,"dup":14}],58:[function(require,module,exports){
+arguments[4][15][0].apply(exports,arguments)
+},{"./core.js":56,"dup":15}],59:[function(require,module,exports){
+arguments[4][16][0].apply(exports,arguments)
+},{"./core.js":56,"dup":16}],60:[function(require,module,exports){
+arguments[4][17][0].apply(exports,arguments)
+},{"./core.js":56,"./done.js":57,"./es6-extensions.js":58,"./finally.js":59,"./node-extensions.js":61,"./synchronous.js":62,"dup":17}],61:[function(require,module,exports){
+arguments[4][18][0].apply(exports,arguments)
+},{"./core.js":56,"asap":63,"dup":18}],62:[function(require,module,exports){
+arguments[4][19][0].apply(exports,arguments)
+},{"./core.js":56,"dup":19}],63:[function(require,module,exports){
+arguments[4][20][0].apply(exports,arguments)
+},{"./raw":64,"dup":20}],64:[function(require,module,exports){
+arguments[4][21][0].apply(exports,arguments)
+},{"dup":21}]},{},[6]);
