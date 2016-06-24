@@ -537,7 +537,10 @@ var helpers = {
       t = t - (t % options.cache);
       agent_host += "?ts=" + t;
     }
-
+    if (options.enabled === false) {
+      tml.logger.debug("agent disabled");
+      return callback();
+    }
     tml.logger.debug("loading agent from " + agent_host);
 
     utils.addJS(window.document, 'tml-agent', agent_host, function() {
@@ -554,25 +557,30 @@ var helpers = {
     // current_source can be a function, hash or a string
     if (current_source_method) {
         if (utils.isFunction(current_source_method)) {
-            current_source = current_source_method();
+          current_source = current_source_method();
         } else {
-            current_source = current_source_method;
+          current_source = current_source_method;
         }
     }
 
     // a simple way to strip a url
     if (!current_source) {
-        var parser = document.createElement('a');
-        parser.href = location.href;
-        current_source = parser.pathname;
+      var parser = document.createElement('a');
+      parser.href = location.href;
+      current_source = parser.pathname
+      if(current_source.length > 1) {
+        current_source = current_source.replace(/\/$/,'');
+      }
     }
 
     current_source = current_source.replace(/^\//, '');
 
-    if (current_source.match(/\/$/))
-        current_source = current_source + 'index';
-    if (current_source === '')
-        current_source = 'index';
+    if (current_source.match(/\/$/)){
+      current_source = current_source + 'index';
+    }
+    if (current_source === ''){
+      current_source = 'index';
+    }
 
     return current_source;
   },
@@ -847,7 +855,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.49',
+      version: '/* @echo VERSION */',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -1028,6 +1036,7 @@ module.exports = {
 
             helpers.includeAgent(tml.app, {
               host: options.agent.host,
+              enabled: options.agent.enabled,
               cache: options.agent.cache || 864000000,
               domains: options.agent.domains || {},
               locale: tml.app.current_locale,
@@ -1797,16 +1806,20 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
+(function (global){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
+/* eslint-disable no-proto */
+
+'use strict'
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
-var isArray = require('is-array')
+var isArray = require('isarray')
 
 exports.Buffer = Buffer
 exports.SlowBuffer = SlowBuffer
@@ -1842,7 +1855,11 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = (function () {
+Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
+  ? global.TYPED_ARRAY_SUPPORT
+  : typedArraySupport()
+
+function typedArraySupport () {
   function Bar () {}
   try {
     var arr = new Uint8Array(1)
@@ -1855,7 +1872,7 @@ Buffer.TYPED_ARRAY_SUPPORT = (function () {
   } catch (e) {
     return false
   }
-})()
+}
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -1882,8 +1899,10 @@ function Buffer (arg) {
     return new Buffer(arg)
   }
 
-  this.length = 0
-  this.parent = undefined
+  if (!Buffer.TYPED_ARRAY_SUPPORT) {
+    this.length = 0
+    this.parent = undefined
+  }
 
   // Common case.
   if (typeof arg === 'number') {
@@ -2011,10 +2030,20 @@ function fromJsonObject (that, object) {
   return that
 }
 
+if (Buffer.TYPED_ARRAY_SUPPORT) {
+  Buffer.prototype.__proto__ = Uint8Array.prototype
+  Buffer.__proto__ = Uint8Array
+} else {
+  // pre-set for values that may exist in the future
+  Buffer.prototype.length = undefined
+  Buffer.prototype.parent = undefined
+}
+
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
+    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -2157,10 +2186,6 @@ function byteLength (string, encoding) {
   }
 }
 Buffer.byteLength = byteLength
-
-// pre-set for values that may exist in the future
-Buffer.prototype.length = undefined
-Buffer.prototype.parent = undefined
 
 function slowToString (encoding, start, end) {
   var loweredCase = false
@@ -2803,7 +2828,7 @@ Buffer.prototype.writeUInt8 = function writeUInt8 (value, offset, noAssert) {
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 1, 0xff, 0)
   if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value)
-  this[offset] = value
+  this[offset] = (value & 0xff)
   return offset + 1
 }
 
@@ -2820,7 +2845,7 @@ Buffer.prototype.writeUInt16LE = function writeUInt16LE (value, offset, noAssert
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = value
+    this[offset] = (value & 0xff)
     this[offset + 1] = (value >>> 8)
   } else {
     objectWriteUInt16(this, value, offset, true)
@@ -2834,7 +2859,7 @@ Buffer.prototype.writeUInt16BE = function writeUInt16BE (value, offset, noAssert
   if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     this[offset] = (value >>> 8)
-    this[offset + 1] = value
+    this[offset + 1] = (value & 0xff)
   } else {
     objectWriteUInt16(this, value, offset, false)
   }
@@ -2856,7 +2881,7 @@ Buffer.prototype.writeUInt32LE = function writeUInt32LE (value, offset, noAssert
     this[offset + 3] = (value >>> 24)
     this[offset + 2] = (value >>> 16)
     this[offset + 1] = (value >>> 8)
-    this[offset] = value
+    this[offset] = (value & 0xff)
   } else {
     objectWriteUInt32(this, value, offset, true)
   }
@@ -2871,7 +2896,7 @@ Buffer.prototype.writeUInt32BE = function writeUInt32BE (value, offset, noAssert
     this[offset] = (value >>> 24)
     this[offset + 1] = (value >>> 16)
     this[offset + 2] = (value >>> 8)
-    this[offset + 3] = value
+    this[offset + 3] = (value & 0xff)
   } else {
     objectWriteUInt32(this, value, offset, false)
   }
@@ -2924,7 +2949,7 @@ Buffer.prototype.writeInt8 = function writeInt8 (value, offset, noAssert) {
   if (!noAssert) checkInt(this, value, offset, 1, 0x7f, -0x80)
   if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value)
   if (value < 0) value = 0xff + value + 1
-  this[offset] = value
+  this[offset] = (value & 0xff)
   return offset + 1
 }
 
@@ -2933,7 +2958,7 @@ Buffer.prototype.writeInt16LE = function writeInt16LE (value, offset, noAssert) 
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = value
+    this[offset] = (value & 0xff)
     this[offset + 1] = (value >>> 8)
   } else {
     objectWriteUInt16(this, value, offset, true)
@@ -2947,7 +2972,7 @@ Buffer.prototype.writeInt16BE = function writeInt16BE (value, offset, noAssert) 
   if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     this[offset] = (value >>> 8)
-    this[offset + 1] = value
+    this[offset + 1] = (value & 0xff)
   } else {
     objectWriteUInt16(this, value, offset, false)
   }
@@ -2959,7 +2984,7 @@ Buffer.prototype.writeInt32LE = function writeInt32LE (value, offset, noAssert) 
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = value
+    this[offset] = (value & 0xff)
     this[offset + 1] = (value >>> 8)
     this[offset + 2] = (value >>> 16)
     this[offset + 3] = (value >>> 24)
@@ -2978,7 +3003,7 @@ Buffer.prototype.writeInt32BE = function writeInt32BE (value, offset, noAssert) 
     this[offset] = (value >>> 24)
     this[offset + 1] = (value >>> 16)
     this[offset + 2] = (value >>> 8)
-    this[offset + 3] = value
+    this[offset + 3] = (value & 0xff)
   } else {
     objectWriteUInt32(this, value, offset, false)
   }
@@ -3253,7 +3278,7 @@ function utf8ToBytes (string, units) {
       }
 
       // valid surrogate pair
-      codePoint = leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00 | 0x10000
+      codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000
     } else if (leadSurrogate) {
       // valid bmp char, but last char was a lead
       if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
@@ -3331,7 +3356,8 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-},{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"base64-js":9,"ieee754":10,"isarray":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 ;(function (exports) {
@@ -3544,38 +3570,10 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
 }
 
 },{}],11:[function(require,module,exports){
+var toString = {}.toString;
 
-/**
- * isArray
- */
-
-var isArray = Array.isArray;
-
-/**
- * toString
- */
-
-var str = Object.prototype.toString;
-
-/**
- * Whether or not the given `val`
- * is an array.
- *
- * example:
- *
- *        isArray([]);
- *        // > true
- *        isArray(arguments);
- *        // > false
- *        isArray('');
- *        // > false
- *
- * @param {mixed} val
- * @return {bool}
- */
-
-module.exports = isArray || function (val) {
-  return !! val && '[object Array]' == str.call(val);
+module.exports = Array.isArray || function (arr) {
+  return toString.call(arr) == '[object Array]';
 };
 
 },{}],12:[function(require,module,exports){
@@ -6032,9 +6030,6 @@ Application.prototype = {
   },
 
   isInlineModeEnabled: function() {
-    // TODO: ensure that if token is provided in the initial settings - application token
-    // we should still be able to submit missing keys
-
     if (!this.current_translator) return false;
     return this.current_translator.inline;
   },
@@ -8557,8 +8552,22 @@ DataTokenizer.prototype = {
       }
     }
     return label;
+  },
+  get metadata() {
+    
+    var tokenTypes = DataTokenizer.prototype.getSupportedTokens();
+    return tokenTypes.reduce(function (result, value, index)
+    {
+      var name = value[1].name;
+      if (!name)
+          name = /function ([^(]*)/.exec( value[1]+"" )[1];
+      
+      if (name)
+          result[name] = value[0];
+      
+      return result;
+    }, {});
   }
-
 };
 
 module.exports = DataTokenizer;
@@ -8601,9 +8610,9 @@ var RESERVED_TOKEN       = "tml";
 var RE_SHORT_TOKEN_START = "\\[[\\w]*:";                      // [link:
 var RE_SHORT_TOKEN_END   = "\\]";                             // ]
 var RE_LONG_TOKEN_START  = "\\[[\\w]*\\]";                    // [link]
-var RE_LONG_TOKEN_END    = "\\[\\/[\\w]*\\]";                 // [/link]
+var RE_LONG_TOKEN_END    = "\\[\\/\\s*[\\w]*\\s*\\]";         // [/link]
 var RE_HTML_TOKEN_START  = "<[^\\>]*>";                       // <link>
-var RE_HTML_TOKEN_END    = "<\\/[^\\>]*>";                    // </link>
+var RE_HTML_TOKEN_END    = "<\\/\\s*[^\\>]*\\s*>";            // </link>
 var RE_TEXT              = "[^\\[\\]<>]+";                    // anything that is left
 
 var TOKEN_TYPE_SHORT     = "short";
@@ -8646,26 +8655,39 @@ DecorationTokenizer.prototype = {
   },
 
   parse: function() {
-    var token = this.getNextFragment();
+    var token = this.getNextFragment(), name;
     if (token.match(new RegExp(RE_SHORT_TOKEN_START))) {
-      return this.parseTree(token.replace(/[\[:]/g, ''), TOKEN_TYPE_SHORT);
+      name = token.replace(/[\[:]/g, '');
+      if (!name) return token;
+      return this.parseTree(name, TOKEN_TYPE_SHORT);
     } else if (token.match(new RegExp(RE_LONG_TOKEN_START))) {
-      return this.parseTree(token.replace(/[\[\]]/g, ''), TOKEN_TYPE_LONG);
+      name = token.replace(/[\[\]]/g, '');
+      if (!name) return token;
+      return this.parseTree(name, TOKEN_TYPE_LONG);
     } else if (token.match(new RegExp(RE_HTML_TOKEN_START))) {
       if (token.indexOf("/>") != -1) return token;
-      return this.parseTree(token.replace(/[<>]/g, '').split(' ')[0], TOKEN_TYPE_HTML);
+      name = token.replace(/[<>]/g, '').split(' ')[0];
+      if (!name) return token;
+      return this.parseTree(name, TOKEN_TYPE_HTML);
     }
     return token;
   },
 
   parseTree: function(name, type) {
     var tree = [name];
+    var endTag, endMatch;
+    Object.defineProperty(tree, "tokenType", {
+      value: type,
+      configurable: true,
+      enumerable: false,
+      writable: true
+    });
     if (this.tokens.indexOf(name) == -1 && name != RESERVED_TOKEN)
       this.tokens.push(name);
-
+    
     if (type == TOKEN_TYPE_SHORT) {
       var first = true;
-      while (this.peek()!==null && !this.peek().match(new RegExp(RE_SHORT_TOKEN_END))) {
+      while (this.peek()!==null && !(endMatch = this.peek().match(new RegExp(RE_SHORT_TOKEN_END)))) {
         var value = this.parse();
         if (first && typeof value == "string") {
           value = value.replace(/^\s+/,'');
@@ -8674,15 +8696,26 @@ DecorationTokenizer.prototype = {
         tree.push(value);
       }
     } else if (type == TOKEN_TYPE_LONG) {
-      while (this.peek()!==null && !this.peek().match(new RegExp(RE_LONG_TOKEN_END))) {
+      endTag = new RegExp("\\[\\/\\s*" + name + "\\s*\\]");
+      while (this.peek()!==null && !(endMatch = this.peek().match(endTag))) {
         tree.push(this.parse());
       }
     } else if (type == TOKEN_TYPE_HTML) {
-      while (this.peek()!==null && !this.peek().match(new RegExp(RE_HTML_TOKEN_END))) {
+      endTag = new RegExp("<\\/\\s*" + name + "\\s*>");
+      while (this.peek()!==null && !(endMatch = this.peek().match(endTag))) {
         tree.push(this.parse());
       }
     }
-
+    
+    if (!endMatch) {
+      Object.defineProperty(tree, "tokenError", {
+        value: 'noclose',
+        configurable: true,
+        enumerable: false,
+        writable: true
+      });
+    }
+    
     this.getNextFragment();
     return tree;
   },
@@ -8756,8 +8789,21 @@ DecorationTokenizer.prototype = {
     var result = this.evaluate(this.parse());
     result = result.replace('[/tml]', '');
     return result;
+  },
+  metadata: {
+    short: {
+      start: RE_SHORT_TOKEN_START,
+      end: RE_SHORT_TOKEN_END
+    },
+    long: {
+      start: RE_LONG_TOKEN_START, 
+      end: RE_LONG_TOKEN_END
+    },
+    html: {
+      start: RE_HTML_TOKEN_START,
+      end: RE_HTML_TOKEN_END 
+    }
   }
-
 };
 
 
@@ -9288,12 +9334,12 @@ var decorator       = require('../decorators/html');
  * @param label
  */
 
-var DataToken = function(name, label) {
+function DataToken(name, label) {
   if (!name) return;
   this.full_name = name;
   this.label = label;
   this.parseElements();
-};
+}
 
 DataToken.prototype = {
 
@@ -9695,13 +9741,13 @@ var decorator       = require('../decorators/html');
 
 var DataToken       = require('./data');
 
-var MethodToken = function(name, label) {
+function MethodToken(name, label) {
   if (!name) return;
   this.full_name = name;
   this.label = label;
   this.parseElements();
   this.initObject();
-};
+}
 
 MethodToken.prototype = new DataToken();
 MethodToken.prototype.constructor = MethodToken;
@@ -9812,12 +9858,12 @@ var decorator       = require('../decorators/html');
 
 var DataToken       = require('./data');
 
-var PipedToken = function(name, label) {
+function PipedToken(name, label) {
   if (!name) return;
   this.full_name = name;
   this.label = label;
   this.parseElements();
-};
+}
 
 PipedToken.prototype = new DataToken();
 PipedToken.prototype.constructor = PipedToken;
