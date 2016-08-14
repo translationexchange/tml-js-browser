@@ -1,6 +1,6 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -138,7 +138,7 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
 module.exports = Ajax;
 },{"tml-js":34}],2:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -316,7 +316,7 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
 module.exports = Browser;
 },{"tml-js":34}],3:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -481,11 +481,16 @@ module.exports = Inline;
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-var tml   = require('tml-js');
+var tml = require('tml-js');
 var utils = tml.utils;
 
 var helpers = {
 
+  /**
+   * Prints welcome message
+   *
+   * @param version
+   */
   printWelcomeMessage: function (version) {
     console.log([
       " _______                  _       _   _             ______          _",
@@ -503,7 +508,12 @@ var helpers = {
     ].join("\n"));
   },
 
-  getBrowserLanguages: function() {
+  /**
+   * Gets browser preferred languages
+   *
+   * @returns {*|string|*[]|null}
+   */
+  getBrowserLanguages: function () {
     var nav = window.navigator;
     return (
       nav.languages ||
@@ -514,10 +524,15 @@ var helpers = {
     );
   },
 
-  includeLs: function(options) {
+  /**
+   * Adds language selector to the page
+   *
+   * @param options
+   */
+  includeLs: function (options) {
     var node = document.createElement("div");
     if (utils.isObject(options)) {
-      for(var propertyName in options) {
+      for (var propertyName in options) {
         if (propertyName == 'type')
           node.setAttribute("data-tml-language-selector", options[propertyName]);
         else
@@ -529,7 +544,15 @@ var helpers = {
     document.body.appendChild(node);
   },
 
-  includeAgent: function(app, options, callback) {
+  /**
+   * Adds agent to the page
+   *
+   * @param app
+   * @param options
+   * @param callback
+   * @returns {*}
+   */
+  includeAgent: function (app, options, callback) {
     var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
     if (options.cache) {
@@ -543,118 +566,299 @@ var helpers = {
     }
     tml.logger.debug("loading agent from " + agent_host);
 
-    utils.addJS(window.document, 'tml-agent', agent_host, function() {
+    utils.addJS(window.document, 'tml-agent', agent_host, function () {
       Trex.init(app.key, options);
       if (callback)
         Trex.ready(callback);
     });
   },
 
-  getCurrentSource: function(options) {
-    var current_source = null;
-    var current_source_method = options.current_source || options.source;
+  /**
+   * Returns path fragments
+   *
+   * @param path
+   * @returns {Array.<T>}
+   */
+  getPathFragments: function (path) {
+    path = path || window.location.pathname;
+    return path.split('/').filter(function (n) {
+      return n !== ''
+    });
+  },
 
-    // current_source can be a function, hash or a string
-    if (current_source_method) {
-        if (utils.isFunction(current_source_method)) {
-          current_source = current_source_method();
-        } else {
-          current_source = current_source_method;
-        }
+  /**
+   * Gets current source from URL path
+   *
+   * @param options
+   * @returns {string}
+   */
+  getDefaultSource: function (options) {
+    var locale_method = options.locale || options.current_locale;
+
+    var current_source = window.location.pathname;
+    if (current_source.length > 1) {
+      current_source = current_source.replace(/\/$/, '');
     }
 
-    // a simple way to strip a url
-    if (!current_source) {
-      var parser = document.createElement('a');
-      parser.href = location.href;
-      current_source = parser.pathname
-      if(current_source.length > 1) {
-        current_source = current_source.replace(/\/$/,'');
-      }
+    // for pre-path, remove the locale from path, and use the rest as the source
+    if (utils.isObject(locale_method) && locale_method.strategy == 'pre-path') {
+      var fragments = helpers.getPathFragments(current_source);
+      fragments.shift();
+      current_source = fragments.join('/');
     }
 
     current_source = current_source.replace(/^\//, '');
 
-    if (current_source.match(/\/$/)){
+    if (current_source.match(/\/$/)) {
       current_source = current_source + 'index';
     }
-    if (current_source === ''){
+
+    if (current_source === '') {
       current_source = 'index';
     }
 
     return current_source;
   },
 
-  getCurrentLocale: function(key, locale_method) {
+  /**
+   * Extracts current source from the url
+   *
+   * @param options
+   * @returns {*}
+   */
+  getCurrentSource: function (options) {
+    var source_method = options.current_source || options.source;
+
+    // current_source can be a function, hash or a string
+    if (source_method) {
+      if (utils.isString(source_method))
+        return source_method;
+
+      if (utils.isFunction(source_method))
+        return source_method();
+
+      // TODO: handle the hash method - for dynamic mapping using regular expressions
+    }
+
+    return helpers.getDefaultSource(options);
+  },
+
+  /**
+   * Extracts locale from params
+   *
+   * @param param_name
+   * @returns {*}
+   */
+  getLocaleFromParam: function (param_name) {
+    param_name = param_name || 'locale';
+    var re = new RegExp("[?&]" + param_name + "=([^&]+)(&|$)");
+    return (window.location.search.match(re) || [])[1];
+  },
+
+  /**
+   * Determines current locale
+   *
+   * @param options
+   * @returns {*}
+   */
+  getCurrentLocale: function (options) {
     var current_locale = null;
+    var locale_method = options.locale || options.current_locale;
 
     if (locale_method) {
+
+      // locale is set/forced by the user, just use it
+      if (utils.isString(locale_method)) {
+        return locale_method;
+      }
+
+      // locale method is a function, execute it and use the result
       if (utils.isFunction(locale_method)) {
-          current_locale = locale_method();
-      } else {
-          current_locale = locale_method;
+        return locale_method();
       }
+
+      // locale must be extracted from param
+      // options: {
+      //    default:    'en',
+      //    strategy:   'param',
+      //    param:      'locale',
+      //    cookie:     true,
+      //    redirect:   false
+      // }
+      if (locale_method.strategy == 'param') {
+        tml.logger.debug("extracting locale from param");
+        current_locale = helpers.getLocaleFromParam(locale_method.param);
+        tml.logger.debug("detected locale: " + current_locale);
+
+        // if locale was detected, and cookie is enabled, store it in the cookie
+        if (current_locale) {
+          if (locale_method.cookie)
+            this.updateCurrentLocale(options.key, current_locale);
+        } else {
+          // if locale is not detected, but the cookie is enabled, pull the locale from the cookie
+          if (locale_method.cookie)
+            current_locale = this.getCookie(options.key).locale;
+        }
+
+        return current_locale;
+      }
+
+      // locale must be extracted from pre-path
+      if (locale_method.strategy == 'pre-path') {
+        tml.logger.debug("extracting locale from pre-path");
+        var fragments = window.location.pathname.split('/').filter(function (n) {
+          return n !== ''
+        });
+        //console.log(elements);
+        return fragments[0];
+      }
+
+      if (locale_method.strategy == 'pre-domain') {
+        var subdomains = window.location.hostname.split('.');
+        return subdomains[0];
+      }
+
+      // options: {
+      //    strategy:   'custom-domain',
+      //    mapping: {
+      //            'en': 'my-en.lvh.me',
+      //            'ru': 'my-ru.lvh.me',
+      //            'ko': 'my-ko.lvh.me'
+      //    }
+      // }
+      if (locale_method.strategy == 'custom-domain') {
+        var host = window.location.hostname;
+        var mapping = utils.swapKeys(locale_method.mapping);
+        return mapping[host];
+      }
+
+      tml.logger.debug("locale method is provided, but not enough information is supplied");
+      return null;
+    }
+
+    // default fallback uses the param locale or cookie locale - for backwards compatibility
+    current_locale = helpers.getLocaleFromParam();
+    if (current_locale) {
+      this.updateCurrentLocale(options.key, current_locale);
     } else {
-      current_locale = (window.location.search.match(/[?&]locale=([^&]+)(&|$)/) ||[])[1];
-      if (current_locale) {
-        this.updateCurrentLocale(key, current_locale);
-      } else {
-        var cookie = this.getCookie(key);
-        current_locale = cookie.locale;
-      }
+      var cookie = this.getCookie(options.key);
+      current_locale = cookie.locale;
     }
     return current_locale;
   },
 
-  updateCurrentLocale: function(key, locale) {
+  /**
+   * Updates locale in the cookie
+   *
+   * @param key
+   * @param locale
+   */
+  updateCurrentLocale: function (key, locale) {
     var data = helpers.getCookie(key);
     data = data || {};
     data.locale = locale;
     this.setCookie(key, data);
   },
 
-  getCookie: function(key) {
+  /**
+   * Returns cookie
+   *
+   * @param key
+   * @returns {*}
+   */
+  getCookie: function (key) {
     var cname = utils.getCookieName(key);
     var name = cname + "=";
     var ca = document.cookie.split(';');
-    for(var i=0; i<ca.length; i++) {
+    for (var i = 0; i < ca.length; i++) {
       var c = ca[i];
-      while (c.charAt(0)==' ') c = c.substring(1);
+      while (c.charAt(0) == ' ') c = c.substring(1);
       if (c.indexOf(name) != -1)
-        return utils.decode(c.substring(name.length,c.length));
+        return utils.decode(c.substring(name.length, c.length));
     }
     return {};
   },
 
-  setCookie: function(key, data) {
+  /**
+   * Sets the cookie
+   *
+   * @param key
+   * @param data
+   */
+  setCookie: function (key, data) {
     var cname = utils.getCookieName(key);
     document.cookie = cname + "=" + utils.encode(data) + "; path=/";
   }
 
 };
 
+
 module.exports = {
-  printWelcomeMessage:  helpers.printWelcomeMessage,
-  getBrowserLanguages:  helpers.getBrowserLanguages,
-  includeTools:         helpers.includeTools,
-  getCurrentSource:     helpers.getCurrentSource,
-  getCurrentLocale:     helpers.getCurrentLocale,
-  updateCurrentLocale:  helpers.updateCurrentLocale,
-  getCookie:            helpers.getCookie,
-  setCookie:            helpers.setCookie,
-  includeLs:            helpers.includeLs,
-  includeAgent:         helpers.includeAgent
+  printWelcomeMessage: helpers.printWelcomeMessage,
+  getBrowserLanguages: helpers.getBrowserLanguages,
+  includeTools: helpers.includeTools,
+  getCurrentSource: helpers.getCurrentSource,
+  getDefaultSource: helpers.getDefaultSource,
+  getCurrentLocale: helpers.getCurrentLocale,
+  updateCurrentLocale: helpers.updateCurrentLocale,
+  getCookie: helpers.getCookie,
+  setCookie: helpers.setCookie,
+  includeLs: helpers.includeLs,
+  includeAgent: helpers.includeAgent
 };
 },{"tml-js":34}],5:[function(require,module,exports){
+/**
+ * Copyright (c) 2016 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code", "kbd"];
 var separators  = ["br", "hr"];
 
 module.exports = {
 
+  /**
+   * Checks if the string is empty
+   *
+   * @param str
+   * @returns {boolean}
+   */
   isEmptyString: function(str) {
     return !str.replace(/[\s\n\r\t\0\x0b\xa0\xc2]/g, '');
   },
 
+  /**
+   * Checks if node is inline
+   *
+   * @param node
+   * @returns {boolean}
+   */
   isInline: function(node) {
     return (
       node.nodeType == 1 &&
@@ -664,6 +868,12 @@ module.exports = {
     );
   },
 
+  /**
+   * Count children by type
+   *
+   * @param node
+   * @returns {{total: number, inline: number, breaking: number, text: number}}
+   */
   childTypeCounts: function(node) {
     var children = node.childNodes;
     var counts = {
@@ -691,6 +901,12 @@ module.exports = {
     return counts;
   },
 
+  /**
+   * Count children elements
+   *
+   * @param node
+   * @returns {number}
+   */
   childElementCount: function(node) {
     var count = 0;
     var children = node.childNodes;
@@ -703,11 +919,23 @@ module.exports = {
     return count;
   },
 
+  /**
+   * Checks if all child nodes are links
+   *
+   * @param node
+   * @returns {boolean}
+   */
   hasOnlyLinks: function(node) {
     var count = this.childElementCount(node);
     return (count == node.getElementsByTagName('A').length);
   },
 
+  /**
+   * Checks if a node has only inline siblings
+   *
+   * @param node
+   * @returns {*}
+   */
   hasInlineSiblings: function(node) {
     if (this.hasOnlyLinks(node.parentNode))
       return false;
@@ -720,36 +948,80 @@ module.exports = {
     );
   },
 
+  /**
+   * Checks if the node is self closing like <br> or <hr>
+   *
+   * @param node
+   * @returns {boolean}
+   */
   isSelfClosing: function(node) {
     return (!node.firstChild);
   },
 
+  /**
+   * Checks if node is a valid text node
+   *
+   * @param node
+   * @returns {boolean}
+   */
   isValidText: function(node) {
     if (!node) return false;
     return (node.nodeType == 3 && !this.isEmptyString(node.nodeValue));
   },
 
+  /**
+   * Checks if node is a separator
+   *
+   * @param node
+   * @returns {boolean}
+   */
   isSeparator: function(node) {
     if (!node) return false;
     return (node.nodeType == 1 && separators.indexOf(node.tagName.toLowerCase()) != -1);
   },
 
+  /**
+   * Checks if a node has child nodes
+   *
+   * @param node
+   * @returns {boolean}
+   */
   hasChildNodes: function(node) {
     if (!node.childNodes) return false;
     return (node.childNodes.length > 0);
   },
 
+  /**
+   * Checks if node is between separators
+   *
+   * @param node
+   * @returns {boolean}
+   */
   isBetweenSeparators: function(node) {
     if (this.isSeparator(node.previousSibling) && !this.isValidText(node.nextSibling)){ return true; }
     if (this.isSeparator(node.nextSibling) && !this.isValidText(node.previousSibling)){ return true; }
     return false;
   },
 
+  /**
+   * Checks if node is the only child
+   *
+   * @param node
+   * @returns {boolean}
+   */
   isOnlyChild: function(node) {
     if (!node.parentNode) return false;
     return (node.parentNode.childNodes.length == 1);
-  },  
+  },
 
+  /**
+   * Checks if node matches selectors
+   *
+   * @param node
+   * @param selectors
+   * @param children
+   * @returns {boolean}
+   */
   matchesSelectors: function(node, selectors, children) {
     var matcher, slctrs = typeof selectors === "string" ? [selectors] : selectors;
     if(slctrs) {
@@ -766,6 +1038,12 @@ module.exports = {
     return false;    
   },
 
+  /**
+   * Returns back a node info
+   *
+   * @param node
+   * @returns {string}
+   */
   nodeInfo: function(node) {
     var info = [node.nodeType];
 
@@ -785,7 +1063,7 @@ module.exports = {
 
 },{}],6:[function(require,module,exports){
 /**
- * Copyright (c) 2015 Translation Exchange, Inc.
+ * Copyright (c) 2016 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -830,17 +1108,16 @@ module.exports = {
     }
   }
 
-  if ( typeof exports === 'object' ) {
+  if (typeof exports === 'object') {
     //console.log('exports load', module);
     module.exports = factory();
     addToRoot(module.exports);
   }
-  else if ( typeof define === 'function' && define.amd ) {
+  else if (typeof define === 'function' && define.amd) {
     //console.log('amd load');
-    define( [], factory );
+    define([], factory);
   }
-  else
-  {
+  else {
     //console.log('global load');
     addToRoot(factory());
   }
@@ -855,7 +1132,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '/* @echo VERSION */',
+      version: '0.4.50',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -875,14 +1152,17 @@ module.exports = {
       init: function (options, callback) {
         options = options || {};
 
+        // storing original options for later use
         tml.options = options;
         tml.config.debug = (options.debug ? options.debug : tml.config.debug);
 
-        options.preferred_languages = options.preferred_languages || helpers.getBrowserLanguages();
+        // do we use it anywhere? - app init pulls them out
+        //options.preferred_languages = options.preferred_languages || helpers.getBrowserLanguages();
 
+        // if current source is not set, we try to automatically extract it from the URL
         if (!options.current_source) {
-          options.current_source = function () {
-            return helpers.getCurrentSource({});
+          options.current_source = function() {
+            return helpers.getDefaultSource(options);
           };
         }
 
@@ -891,75 +1171,14 @@ module.exports = {
         }
 
         tml.initApplication(options, function () {
-          tml.startKeyListener();
-
+          tml.startKeyListener(options);
           tml.startSourceListener(options);
-
-          if (callback) {
-            callback();
-          }
+          if (callback) callback();
         });
       },
 
-      // submit any newly registered keys every 3 seconds
-      startKeyListener: function () {
-        if (tml.getApplication().isInlineModeEnabled()) {
-          var app = tml.getApplication();
-          var freq = 3000;
-          setInterval(function () {
-            app.submitMissingTranslationKeys();
-          }, freq);
-        }
-      },
-
-      refreshSource: function (options) {
-        var self = this;
-        var source = helpers.getCurrentSource(options);
-        var app = tml.getApplication();
-        var key = tml.utils.generateKey(source); // utils
-        var locale = app.current_locale;
-
-        var updateSource = function () {
-          if (self.tokenizer) {
-            self.tokenizer.updateAllNodes();
-          }
-        };
-
-        if (!app.getSource(source)) {
-          app.loadSources([source], locale, function (sources) {
-            if (sources.length > 0 && sources[0] && sources[0].sources && sources[0].sources.length > 0) {
-              app.loadSources(sources[0].sources, app.current_locale, updateSource);
-            } else {
-              updateSource();
-            }
-          });
-        }
-      },
-
-      //  keep track of route changes and update source
-      startSourceListener: function (options) {
-        // TODO: Ian, we don't need this unless we use a fully automated mode
-        if (!options.translateBody) return;
-
-        var self = this;
-        var app = tml.getApplication();
-
-        function setSource(method) {
-          return function () {
-            if (method) {
-              method.apply(history, arguments);
-            }
-            self.refreshSource(options);
-          };
-        }
-
-        window.history.pushState = setSource(window.history.pushState);
-        window.history.replaceState = setSource(window.history.replaceState);
-        window.addEventListener('popstate', setSource());
-      },
-
       /**
-       * Initializes application
+       * Initializes the application
        *
        * @param options
        * @param callback
@@ -968,27 +1187,40 @@ module.exports = {
         var t0 = new Date();
 
         var cookie = helpers.getCookie(options.key);
-
         var cache_version = null;
 
         if (options.cache && options.cache.version)
           cache_version = options.cache.version;
 
+        // registering AJAX based adapter for all API calls
         tml.config.registerApiAdapter('ajax', require('./api_adapters/ajax'));
         tml.config.api = 'ajax';
 
+        // registering cache options - local storage or in-page block
         tml.config.registerCacheAdapters({
           inline: require('./cache_adapters/inline'),
           browser: require('./cache_adapters/browser')
         });
 
+        // updating options and configuring the SDK
         options = tml.utils.merge(tml.config, {
           delayed_flush: true,
           api: "ajax",
+
+          // current source can be a method, a hash or a string
           current_source: helpers.getCurrentSource(options),
-          current_locale: helpers.getCurrentLocale(options.key, options.current_locale),
+
+          // for backwards compatibility we support current_locale - but we should swtich documentation
+          // to user "locale" instead. "locale" now supports strategies
+          current_locale: helpers.getCurrentLocale(options),
+
+          // translator information can only be extracted from the cookie
           current_translator: cookie.translator ? new tml.Translator(cookie.translator) : null,
+
+          // get the list of locales from the browser
           accepted_locales: helpers.getBrowserLanguages(),
+
+          // setup default cache to use local storage - unless user overwrites it
           cache: {
             enabled: true,
             adapter: "browser",
@@ -1017,7 +1249,8 @@ module.exports = {
 
           tml.domReady(function () {
 
-            if ((options.translateBody || options.translate_body) && !mutationObserver) {
+            var translateBodySettings = options.translateBody || options.translate_body;
+            if (translateBodySettings && !mutationObserver) {
               tml.translateElement(document.body);
             }
 
@@ -1030,8 +1263,9 @@ module.exports = {
 
             if (!options.agent) options.agent = {};
 
-            if (options.language_selector) {
-              helpers.includeLs(options.language_selector);
+            var languageSelectorSettings = options.language_selector || options.languageSelector;
+            if (languageSelectorSettings) {
+              helpers.includeLs(languageSelectorSettings);
             }
 
             helpers.includeAgent(tml.app, {
@@ -1039,6 +1273,8 @@ module.exports = {
               enabled: options.agent.enabled,
               cache: options.agent.cache || 864000000,
               domains: options.agent.domains || {},
+              locale_strategy: options.locale,
+              config: tml.config,
               locale: tml.app.current_locale,
               source: tml.app.current_source,
               sdk: options.sdk || 'tml-js v' + tml.version,
@@ -1056,6 +1292,77 @@ module.exports = {
       },
 
       /**
+       * Submits any newly registered keys every 3 seconds
+       *
+       * @param options
+       */
+      startKeyListener: function (options) {
+        if (!tml.getApplication().isInlineModeEnabled())
+          return;
+
+        var app = tml.getApplication();
+        var freq = options.flush_interval || 3000;
+        setInterval(function () {
+          app.submitMissingTranslationKeys();
+        }, freq);
+      },
+
+      /**
+       * Keeps track of route changes and update source
+       *
+       * @param options
+       */
+      startSourceListener: function (options) {
+        // TODO: Ian, we don't need this unless we use a fully automated mode
+        if (!options.translateBody) return;
+
+        var self = this;
+        var app = tml.getApplication();
+
+        function setSource(method) {
+          return function () {
+            if (method) {
+              method.apply(history, arguments);
+            }
+            self.refreshSource(options);
+          };
+        }
+
+        window.history.pushState = setSource(window.history.pushState);
+        window.history.replaceState = setSource(window.history.replaceState);
+        window.addEventListener('popstate', setSource());
+      },
+
+      /**
+       * Refreshes current source from the server
+       *
+       * @param options
+       */
+      refreshSource: function (options) {
+        var self = this;
+        var source = helpers.getCurrentSource(options);
+        var app = tml.getApplication();
+        var key = tml.utils.generateKey(source); // utils
+        var locale = app.current_locale;
+
+        var updateSource = function () {
+          if (self.tokenizer) {
+            self.tokenizer.updateAllNodes();
+          }
+        };
+
+        if (!app.getSource(source)) {
+          app.loadSources([source], locale, function (sources) {
+            if (sources.length > 0 && sources[0] && sources[0].sources && sources[0].sources.length > 0) {
+              app.loadSources(sources[0].sources, app.current_locale, updateSource);
+            } else {
+              updateSource();
+            }
+          });
+        }
+      },
+
+      /**
        * Fires when DOM is ready
        *
        * @param fn
@@ -1070,8 +1377,6 @@ module.exports = {
 
       /**
        * Changes language. This method can be used:
-       *
-       *
        *
        * @param locale
        * @param refresh
@@ -1199,7 +1504,7 @@ module.exports = {
             });
 
             if (document.readyState == "interactive") {
-              if(!tml.options.translateBody || tml.options.disableAutoTranslate) {
+              if (!tml.options.translateBody || tml.options.disableAutoTranslate) {
                 observer.disconnect();
               }
             }
@@ -1384,13 +1689,42 @@ module.exports = {
 ));
 
 },{"./api_adapters/ajax":1,"./cache_adapters/browser":2,"./cache_adapters/inline":3,"./helpers":4,"./tokenizers/dom":7,"tiny-emitter":12,"tml-js":34}],7:[function(require,module,exports){
+/**
+ * Copyright (c) 2016 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 var tml         = require('tml-js');
 var config      = tml.config;
 var utils       = tml.utils;
 
 var dom         = require('../helpers/dom-helpers');
-
-
 
 var DomTokenizer = function(doc, context, options) {
   this.doc = doc;
@@ -1405,17 +1739,32 @@ DomTokenizer.prototype = {
   contentNodes   :[],
   translatedNodes :[],
 
-  getOption: function(name) {
-    if(typeof this.options[name] === 'undefined' || this.options[name] === null) {
-      return utils.hashValue(config.translator_options, name);
-    }
-    return this.options[name];
-  },  
+  /**
+   * Returns back config option value
+   *
+   * @param name
+   * @returns {*}
+   * @param default_value
+   */
+  getOption: function(name, default_value) {
+    if(typeof this.options[name] === 'undefined' || this.options[name] === null)
+      return utils.hashValue(config.translator_options, name) || default_value;
 
+    return this.options[name] || default_value;
+  },
+
+  /**
+   * Translates the document
+   *
+   * @returns {*}
+   */
   translate: function() {
     return this.translateTree(this.doc);
   },
 
+  /**
+   * Updates all nodes with translations
+   */
   updateAllNodes: function(){
     for(var i=0,l=this.contentCache.length;i<l;i++){
       if(this.contentCache[i].container) {
@@ -1424,6 +1773,11 @@ DomTokenizer.prototype = {
     }
   },
 
+  /**
+   * Replaces nodes
+   *
+   * @param nodes
+   */
   replaceNodes: function(nodes) {
 
     var ti = document.createElement("tml:inline");
@@ -1463,6 +1817,11 @@ DomTokenizer.prototype = {
   },
 
 
+  /**
+   * Translates DOM
+   *
+   * @param node
+   */
   translateDOM: function(node) {
     if(this.translatedNodes.indexOf(node) !== -1) return;
     this.translatedNodes.push(node);
@@ -1500,9 +1859,15 @@ DomTokenizer.prototype = {
       window.tml_end_block();
     }
   },
-  
+
+  /**
+   * Determine a source block
+   *
+   * @param node
+   * @returns {*}
+   */
   getSourceBlock: function(node) {
-    if(config.sourceElements) {
+    if (config.sourceElements) {
       var match = dom.matchesSelectors(node, config.sourceElements);
       if(match) {
         return node.getAttribute('name') || node.getAttribute('id') || node.getAttribute('class');
@@ -1512,6 +1877,12 @@ DomTokenizer.prototype = {
     
   },
 
+  /**
+   * Checks if node is translatable
+   *
+   * @param node
+   * @returns {boolean}
+   */
   isTranslatable: function(node) {
     if (node.nodeType == 8) { return false; }
     if (node.nodeType == 3) { node = node.parentNode; }
@@ -1525,6 +1896,13 @@ DomTokenizer.prototype = {
     return true;
   },
 
+  /**
+   * Translates TML string with data tokens
+   *
+   * @param tml
+   * @param data
+   * @returns {*}
+   */
   translateTml: function(tml, data) {
     tml = this.generateDataTokens(tml);
     data = data || (this.tokens);
@@ -1555,7 +1933,12 @@ DomTokenizer.prototype = {
   },
 
 
-
+  /**
+   * Generates TML tags
+   *
+   * @param node
+   * @returns {*}
+   */
   generateTmlTags: function(node) {
     if(node.nodeType == 3) { 
       return this.escapeHtml(node.nodeValue); 
@@ -1601,6 +1984,12 @@ DomTokenizer.prototype = {
     return tml;
   },
 
+  /**
+   * Creates a data token from a variable node element
+   *
+   * @param node
+   * @returns {string}
+   */
   registerDataTokenFromVar: function(node) {
     var object = {};
     var tokenName = 'var';
@@ -1620,15 +2009,30 @@ DomTokenizer.prototype = {
     return "{" + tokenName + "}";
   },
 
+  /**
+   * Resets context
+   */
   resetContext: function() {
     this.tokens = [].concat(this.context);
   },
 
+  /**
+   * Checks if the token is a short token
+   *
+   * @param token
+   * @param value
+   * @returns {boolean}
+   */
   isShortToken: function(token, value) {
     return (this.getOption("nodes.short").indexOf(token.toLowerCase()) != -1 || value.length < 20);
   },
 
- 
+  /**
+   * Generates data tokens
+   *
+   * @param text
+   * @returns {*|void|XML|string}
+   */
   generateDataTokens: function(text) {
     var self = this;
 
@@ -1640,14 +2044,14 @@ DomTokenizer.prototype = {
       var formats = self.getOption("data_tokens.date.formats");
       formats.forEach(function(format) {
         var regex = format[0];
-        var date_format = format[1];
+        //var date_format = format[1];
 
         var matches = text.match(regex);
         if (matches) {
           matches.forEach(function (match) {
-            var date = match;
+            //var date = match;
             //var date = self.localizeDate(match, date_format);
-            var token = self.contextualize(tokenName, date);
+            var token = self.contextualize(tokenName, match);
             var replacement = "{" + token + "}";
             text = text.replace(match, replacement);
           });
@@ -1676,7 +2080,13 @@ DomTokenizer.prototype = {
     return text;
   },
 
-
+  /**
+   * Generates HTML tokens
+   *
+   * @param node
+   * @param value
+   * @returns {string}
+   */
   generateHtmlToken: function(node, value) {
     var name = node.tagName.toLowerCase();
     var attributes = node.attributes;
@@ -1715,6 +2125,12 @@ DomTokenizer.prototype = {
   },
 
 
+  /**
+   * Uses token name mapping to create token names from HTML tags
+   *
+   * @param node
+   * @returns {*}
+   */
   adjustName: function(node) {
     if(node && node.tagName) {
       var name = node.tagName.toLowerCase();
@@ -1725,7 +2141,13 @@ DomTokenizer.prototype = {
     return "";
   },
 
-
+  /**
+   * Generates tokens by name
+   *
+   * @param name
+   * @param context
+   * @returns {*}
+   */
   contextualize: function(name, context) {
     if (this.tokens[name] && this.tokens[name] != context) {
       var index = 0;
@@ -1743,14 +2165,25 @@ DomTokenizer.prototype = {
   },
 
 
-
   // String Helpers
 
+  /**
+   * Checks if string is empty
+   *
+   * @param tml
+   * @returns {boolean}
+   */
   isEmptyString: function(tml) {
     tml = tml.replace(/[\s\n\r\t\0\x0b\xa0\xc2]/g, '');
     return (tml === '');
   },
 
+  /**
+   * Checks if string can be translated
+   *
+   * @param text
+   * @returns {*|boolean|Boolean|Array|{index: number, input: string}}
+   */
   isUntranslatableText: function(text) {
     return (
       this.isEmptyString(text) ||   // empty
@@ -1758,21 +2191,38 @@ DomTokenizer.prototype = {
     );
   },
 
+  /**
+   * Checks if TML is valid
+   *
+   * @param tml
+   * @returns {boolean}
+   */
   isValidTml: function(tml) {
-    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}|{}/gi;
+    var tokens = /<\/?([a-z][a-z0-9]*)\b[^>]*>|{([a-z0-9_\.]+)}|\{\}/gi;
     return !this.isEmptyString(tml.replace(tokens, ''));
   },
 
+  /**
+   * Cleans up string value
+   *
+   * @param value
+   * @returns {*|void|XML|string}
+   */
   sanitizeValue: function(value) {
     return value.replace(/^\s+/,'');
   },
 
+  /**
+   * Escapes HTML
+   *
+   * @param str
+   * @returns {string}
+   */
   escapeHtml: function(str) {
     var div = document.createElement('div');
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
   },
-
 
 
   // Debugging
@@ -1806,20 +2256,16 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
-(function (global){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
-/* eslint-disable no-proto */
-
-'use strict'
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
-var isArray = require('isarray')
+var isArray = require('is-array')
 
 exports.Buffer = Buffer
 exports.SlowBuffer = SlowBuffer
@@ -1855,11 +2301,7 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
-  ? global.TYPED_ARRAY_SUPPORT
-  : typedArraySupport()
-
-function typedArraySupport () {
+Buffer.TYPED_ARRAY_SUPPORT = (function () {
   function Bar () {}
   try {
     var arr = new Uint8Array(1)
@@ -1872,7 +2314,7 @@ function typedArraySupport () {
   } catch (e) {
     return false
   }
-}
+})()
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -1899,10 +2341,8 @@ function Buffer (arg) {
     return new Buffer(arg)
   }
 
-  if (!Buffer.TYPED_ARRAY_SUPPORT) {
-    this.length = 0
-    this.parent = undefined
-  }
+  this.length = 0
+  this.parent = undefined
 
   // Common case.
   if (typeof arg === 'number') {
@@ -2030,20 +2470,10 @@ function fromJsonObject (that, object) {
   return that
 }
 
-if (Buffer.TYPED_ARRAY_SUPPORT) {
-  Buffer.prototype.__proto__ = Uint8Array.prototype
-  Buffer.__proto__ = Uint8Array
-} else {
-  // pre-set for values that may exist in the future
-  Buffer.prototype.length = undefined
-  Buffer.prototype.parent = undefined
-}
-
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
-    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -2186,6 +2616,10 @@ function byteLength (string, encoding) {
   }
 }
 Buffer.byteLength = byteLength
+
+// pre-set for values that may exist in the future
+Buffer.prototype.length = undefined
+Buffer.prototype.parent = undefined
 
 function slowToString (encoding, start, end) {
   var loweredCase = false
@@ -2828,7 +3262,7 @@ Buffer.prototype.writeUInt8 = function writeUInt8 (value, offset, noAssert) {
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 1, 0xff, 0)
   if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value)
-  this[offset] = (value & 0xff)
+  this[offset] = value
   return offset + 1
 }
 
@@ -2845,7 +3279,7 @@ Buffer.prototype.writeUInt16LE = function writeUInt16LE (value, offset, noAssert
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = (value & 0xff)
+    this[offset] = value
     this[offset + 1] = (value >>> 8)
   } else {
     objectWriteUInt16(this, value, offset, true)
@@ -2859,7 +3293,7 @@ Buffer.prototype.writeUInt16BE = function writeUInt16BE (value, offset, noAssert
   if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     this[offset] = (value >>> 8)
-    this[offset + 1] = (value & 0xff)
+    this[offset + 1] = value
   } else {
     objectWriteUInt16(this, value, offset, false)
   }
@@ -2881,7 +3315,7 @@ Buffer.prototype.writeUInt32LE = function writeUInt32LE (value, offset, noAssert
     this[offset + 3] = (value >>> 24)
     this[offset + 2] = (value >>> 16)
     this[offset + 1] = (value >>> 8)
-    this[offset] = (value & 0xff)
+    this[offset] = value
   } else {
     objectWriteUInt32(this, value, offset, true)
   }
@@ -2896,7 +3330,7 @@ Buffer.prototype.writeUInt32BE = function writeUInt32BE (value, offset, noAssert
     this[offset] = (value >>> 24)
     this[offset + 1] = (value >>> 16)
     this[offset + 2] = (value >>> 8)
-    this[offset + 3] = (value & 0xff)
+    this[offset + 3] = value
   } else {
     objectWriteUInt32(this, value, offset, false)
   }
@@ -2949,7 +3383,7 @@ Buffer.prototype.writeInt8 = function writeInt8 (value, offset, noAssert) {
   if (!noAssert) checkInt(this, value, offset, 1, 0x7f, -0x80)
   if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value)
   if (value < 0) value = 0xff + value + 1
-  this[offset] = (value & 0xff)
+  this[offset] = value
   return offset + 1
 }
 
@@ -2958,7 +3392,7 @@ Buffer.prototype.writeInt16LE = function writeInt16LE (value, offset, noAssert) 
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = (value & 0xff)
+    this[offset] = value
     this[offset + 1] = (value >>> 8)
   } else {
     objectWriteUInt16(this, value, offset, true)
@@ -2972,7 +3406,7 @@ Buffer.prototype.writeInt16BE = function writeInt16BE (value, offset, noAssert) 
   if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     this[offset] = (value >>> 8)
-    this[offset + 1] = (value & 0xff)
+    this[offset + 1] = value
   } else {
     objectWriteUInt16(this, value, offset, false)
   }
@@ -2984,7 +3418,7 @@ Buffer.prototype.writeInt32LE = function writeInt32LE (value, offset, noAssert) 
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = (value & 0xff)
+    this[offset] = value
     this[offset + 1] = (value >>> 8)
     this[offset + 2] = (value >>> 16)
     this[offset + 3] = (value >>> 24)
@@ -3003,7 +3437,7 @@ Buffer.prototype.writeInt32BE = function writeInt32BE (value, offset, noAssert) 
     this[offset] = (value >>> 24)
     this[offset + 1] = (value >>> 16)
     this[offset + 2] = (value >>> 8)
-    this[offset + 3] = (value & 0xff)
+    this[offset + 3] = value
   } else {
     objectWriteUInt32(this, value, offset, false)
   }
@@ -3278,7 +3712,7 @@ function utf8ToBytes (string, units) {
       }
 
       // valid surrogate pair
-      codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000
+      codePoint = leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00 | 0x10000
     } else if (leadSurrogate) {
       // valid bmp char, but last char was a lead
       if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
@@ -3356,8 +3790,7 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"base64-js":9,"ieee754":10,"isarray":11}],9:[function(require,module,exports){
+},{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 ;(function (exports) {
@@ -3570,10 +4003,38 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
 }
 
 },{}],11:[function(require,module,exports){
-var toString = {}.toString;
 
-module.exports = Array.isArray || function (arr) {
-  return toString.call(arr) == '[object Array]';
+/**
+ * isArray
+ */
+
+var isArray = Array.isArray;
+
+/**
+ * toString
+ */
+
+var str = Object.prototype.toString;
+
+/**
+ * Whether or not the given `val`
+ * is an array.
+ *
+ * example:
+ *
+ *        isArray([]);
+ *        // > true
+ *        isArray(arguments);
+ *        // > false
+ *        isArray('');
+ *        // > false
+ *
+ * @param {mixed} val
+ * @return {bool}
+ */
+
+module.exports = isArray || function (val) {
+  return !! val && '[object Array]' == str.call(val);
 };
 
 },{}],12:[function(require,module,exports){
@@ -6030,6 +6491,9 @@ Application.prototype = {
   },
 
   isInlineModeEnabled: function() {
+    // TODO: ensure that if token is provided in the initial settings - application token
+    // we should still be able to submit missing keys
+
     if (!this.current_translator) return false;
     return this.current_translator.inline;
   },
@@ -10511,6 +10975,14 @@ module.exports = {
   //  var keys = []; for (k in obj) {keys.push(k)}
   //  return keys;
     return Object.keys(obj);
+  },
+
+  swapKeys: function (obj) {
+    var ret = {};
+    for(var key in obj){
+      ret[obj[key]] = key;
+    }
+    return ret;
   },
 
   generateSourceKey: function(label) {
