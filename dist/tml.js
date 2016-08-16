@@ -582,7 +582,7 @@ var helpers = {
   getPathFragments: function (path) {
     path = path || window.location.pathname;
     return path.split('/').filter(function (n) {
-      return n !== ''
+      return n !== '';
     });
   },
 
@@ -707,7 +707,7 @@ var helpers = {
       if (locale_method.strategy == 'pre-path') {
         tml.logger.debug("extracting locale from pre-path");
         var fragments = window.location.pathname.split('/').filter(function (n) {
-          return n !== ''
+          return n !== '';
         });
         //console.log(elements);
         return fragments[0];
@@ -791,7 +791,6 @@ var helpers = {
   }
 
 };
-
 
 module.exports = {
   printWelcomeMessage: helpers.printWelcomeMessage,
@@ -1267,6 +1266,16 @@ module.exports = {
             if (languageSelectorSettings) {
               helpers.includeLs(languageSelectorSettings);
             }
+
+            //extend({}, options.agent, {
+            //  locale_strategy: options.locale,
+            //  config: tml.config,
+            //  locale: tml.app.current_locale,
+            //  source: tml.app.current_source,
+            //  sdk: options.sdk || 'tml-js v' + tml.version,
+            //  css: tml.app.css,
+            //  languages: tml.app.languages
+            //});
 
             helpers.includeAgent(tml.app, {
               host: options.agent.host,
