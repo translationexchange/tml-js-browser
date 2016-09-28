@@ -937,7 +937,6 @@ module.exports = {
    */
   hasInlineSiblings: function(node) {
     if (this.hasOnlyLinks(node.parentNode)) {
-      console.log("Has only links:", node);
       return false;
     }
 
@@ -1457,7 +1456,6 @@ module.exports = {
        */
       translateLabel: function (label, description, tokens, options) {
         var params = tml.utils.normalizeParams(label, description, tokens, options);
-        console.log(params.options);
         params.options.skip_decorations = true;
         return tml.translate(params);
       },
