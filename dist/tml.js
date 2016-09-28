@@ -910,7 +910,7 @@ module.exports = {
     var count = 0;
     var children = node.childNodes;
     for (var i = 0; i < children.length; i++) {
-      if (children[i].nodeType == 1) {
+      if (children[i].nodeType == 1 || children[i].nodeType == 3) {
         count++;
       }
     }
@@ -936,8 +936,10 @@ module.exports = {
    * @returns {*}
    */
   hasInlineSiblings: function(node) {
-    if (this.hasOnlyLinks(node.parentNode))
+    if (this.hasOnlyLinks(node.parentNode)) {
+      console.log("Has only links:", node);
       return false;
+    }
 
     var has_siblings = (node.parentNode && node.parentNode.childNodes.length > 1);
     return (
@@ -1455,6 +1457,7 @@ module.exports = {
        */
       translateLabel: function (label, description, tokens, options) {
         var params = tml.utils.normalizeParams(label, description, tokens, options);
+        console.log(params.options);
         params.options.skip_decorations = true;
         return tml.translate(params);
       },
@@ -1781,9 +1784,9 @@ DomTokenizer.prototype = {
       item = this.contentCache[i];
       if(item.container) {
         if(item.attribute) {
-          item.container.setAttribute(item.attribute, this.translateTml(item.tml, item.data, false));  
+          item.container.setAttribute(item.attribute, this.translateTml(item.tml, item.data, true));
         } else {
-          item.container.innerHTML = this.translateTml(item.tml, item.data);  
+          item.container.innerHTML = this.translateTml(item.tml, item.data);
         }
       }
     }
@@ -1831,10 +1834,6 @@ DomTokenizer.prototype = {
       
     }
   },
-
-
-
-
 
   /**
    * Translates DOM
@@ -1885,7 +1884,6 @@ DomTokenizer.prototype = {
   },
 
 
-
   /**
    * Translates Node Attibutes
    *
@@ -1900,20 +1898,15 @@ DomTokenizer.prototype = {
 
 
   /**
-   * Translates Node Attibutes
+   * Replace Node Attibutes
    *
    * @param node
    * @param attr
    */
   replaceAttributes: function(node, attr){
     var tml         = node.getAttribute(attr);
-    // console.log(66, this.tokens);
     var data        = this.tokens;
     var translation = this.translateTml(tml, null, true);
-    // console.log(77, this.tokens);
-    
-
-    console.log(44, tml, data);
 
     node.setAttribute(attr, translation);
     this.contentCache.push({container: node, tml: tml, data: data, attribute: attr}); 
@@ -1971,12 +1964,14 @@ DomTokenizer.prototype = {
 
     var translation = tml;
 
+    // console.log(tml, label);
+
     if (this.getOption("split_sentences")) {
       var sentences = utils.splitSentences(tml);
       if (sentences) {
         var self = this;
         sentences.forEach(function (sentence) {
-          var sentenceTranslation = self.getOption("debug") ? self.debugTranslation(sentence) : window[label?"trl":"tr"](sentence, data, self.options);
+          var sentenceTranslation = self.getOption("debug") ? self.debugTranslation(sentence) : window[label === true ? "trl" : "tr"](sentence, data, self.options);
           translation = translation.replace(sentence, sentenceTranslation);
         });
         this.resetContext();
@@ -1986,7 +1981,7 @@ DomTokenizer.prototype = {
 
     tml = tml.replace(/[\n]/g, '').replace(/\s\s+/g, ' ').trim();
 
-    translation = this.getOption("debug") ? this.debugTranslation(tml) : window.tr(tml, data, this.options);
+    translation = this.getOption("debug") ? this.debugTranslation(tml) : window[label ? "trl" : "tr"](tml, data, this.options);
 
     this.resetContext();
     return translation;
@@ -2005,7 +2000,7 @@ DomTokenizer.prototype = {
     }
 
     if (!this.isTranslatable(node)) {
-      var tokenName = this.contextualize(this.adjustName(node), node.outerHTML);
+      var tokenName = this.contextualize(this.adjustTokenName(node), node.outerHTML);
       return "{" + tokenName + "}";
     }
 
@@ -2020,8 +2015,9 @@ DomTokenizer.prototype = {
       var child = node.childNodes[i];
       buffer = buffer + ((child.nodeType == 3) ? this.escapeHtml(child.nodeValue) : this.generateTmlTags(child));
     }
+
     var tokenContext = this.generateHtmlToken(node);
-    var token = this.contextualize(this.adjustName(node), tokenContext);
+    var token = this.contextualize(this.adjustTokenName(node), tokenContext);
     var tml;
 
     var value = this.sanitizeValue(buffer);
@@ -2191,10 +2187,14 @@ DomTokenizer.prototype = {
    * @param node
    * @returns {*}
    */
-  adjustName: function(node) {
+  adjustTokenName: function(node) {
     if(node && node.tagName) {
-      var name = node.tagName.toLowerCase();
       var map = this.getOption("name_mapping");
+
+      if (utils.isString(map))
+        return map;
+
+      var name = node.tagName.toLowerCase();
       name = map[name] ? map[name] : name;
       return name;
     }
@@ -2209,21 +2209,21 @@ DomTokenizer.prototype = {
    * @returns {*}
    */
   contextualize: function(name, context) {
-    if (this.tokens[name] && this.tokens[name] != context) {
-      var index = 0;
-      var matches = name.match(/\d+$/);
-      if (matches && matches.length > 0) {
-        index = parseInt(matches[matches.length-1]);
-        name = name.replace("" + index, '');
-      }
-      name = name + (index + 1);
-      return this.contextualize(name, context);
+    // if token is not yet used, use it
+    if (!this.tokens[name]) {
+      this.tokens[name] = context;
+      return name;
     }
 
-    this.tokens[name] = context;
-    return name;
+    var index = 0;
+    var matches = name.match(/\d+$/);
+    if (matches && matches.length > 0) {
+      index = parseInt(matches[matches.length-1]);
+      name = name.replace("" + index, '');
+    }
+    name = name + (index + 1);
+    return this.contextualize(name, context);
   },
-
 
   // String Helpers
 
@@ -2316,14 +2316,12 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
-(function (global){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
-/* eslint-disable no-proto */
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
@@ -2363,22 +2361,20 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
-  ? global.TYPED_ARRAY_SUPPORT
-  : (function () {
-      function Bar () {}
-      try {
-        var arr = new Uint8Array(1)
-        arr.foo = function () { return 42 }
-        arr.constructor = Bar
-        return arr.foo() === 42 && // typed array instances can be augmented
-            arr.constructor === Bar && // constructor can be set
-            typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
-            arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
-      } catch (e) {
-        return false
-      }
-    })()
+Buffer.TYPED_ARRAY_SUPPORT = (function () {
+  function Bar () {}
+  try {
+    var arr = new Uint8Array(1)
+    arr.foo = function () { return 42 }
+    arr.constructor = Bar
+    return arr.foo() === 42 && // typed array instances can be augmented
+        arr.constructor === Bar && // constructor can be set
+        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+        arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+  } catch (e) {
+    return false
+  }
+})()
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -2534,16 +2530,10 @@ function fromJsonObject (that, object) {
   return that
 }
 
-if (Buffer.TYPED_ARRAY_SUPPORT) {
-  Buffer.prototype.__proto__ = Uint8Array.prototype
-  Buffer.__proto__ = Uint8Array
-}
-
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
-    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -3860,7 +3850,6 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -11140,8 +11129,8 @@ module.exports = {
     return {
       label: label,
       description: description,
-      tokens: tokens,
-      options: options
+      tokens: this.merge({}, tokens),
+      options: this.merge({}, options)
     };
   },
 
