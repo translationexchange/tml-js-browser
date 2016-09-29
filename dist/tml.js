@@ -705,6 +705,8 @@ var helpers = {
 
       // locale must be extracted from pre-path
       if (locale_method.strategy == 'pre-path') {
+        console.log("Figuring out the locale....");
+
         tml.logger.debug("extracting locale from pre-path");
         var fragments = window.location.pathname.split('/').filter(function (n) {
           return n !== '';
@@ -1210,7 +1212,7 @@ module.exports = {
           // current source can be a method, a hash or a string
           current_source: helpers.getCurrentSource(options),
 
-          // for backwards compatibility we support current_locale - but we should swtich documentation
+          // for backwards compatibility we support current_locale - but we should switch documentation
           // to user "locale" instead. "locale" now supports strategies
           current_locale: helpers.getCurrentLocale(options),
 
@@ -1955,36 +1957,41 @@ DomTokenizer.prototype = {
    * @returns {*}
    */
   translateTml: function(tml, data, label) {
-    tml = this.generateDataTokens(tml);
-    data = data || (this.tokens);
-
-    if (!this.isValidTml(tml)) return null;
-
-    var translation = tml;
-
-    // console.log(tml, label);
-
     if (this.getOption("split_sentences")) {
+      var translation = tml;
       var sentences = utils.splitSentences(tml);
       if (sentences) {
         var self = this;
         sentences.forEach(function (sentence) {
-          var sentenceTranslation = self.getOption("debug") ? self.debugTranslation(sentence) : window[label === true ? "trl" : "tr"](sentence, data, self.options);
-          translation = translation.replace(sentence, sentenceTranslation);
+          var sentenceTranslation = self.translateTmlFragment(sentence, data, label);
+          if (sentenceTranslation)
+            translation = translation.replace(sentence, sentenceTranslation);
         });
-        this.resetContext();
         return translation;
       }
     }
 
+    return this.translateTmlFragment(tml, data, label);
+  },
+
+  /**
+   * Translates TML fragment
+   *
+   * @param tml
+   * @param data
+   * @param label
+   * @returns {*}
+   */
+  translateTmlFragment: function(tml, data, label) {
+    tml = this.generateDataTokens(tml);
+    data = data || (this.tokens);
+    if (!this.isValidTml(tml)) return null;
+    var translation = tml;
     tml = tml.replace(/[\n]/g, '').replace(/\s\s+/g, ' ').trim();
-
     translation = this.getOption("debug") ? this.debugTranslation(tml) : window[label ? "trl" : "tr"](tml, data, this.options);
-
     this.resetContext();
     return translation;
   },
-
 
   /**
    * Generates TML tags
@@ -2101,15 +2108,7 @@ DomTokenizer.prototype = {
         //var date_format = format[1];
 
         var matches = text.match(regex);
-        if (matches) {
-          matches.forEach(function (match) {
-            //var date = match;
-            //var date = self.localizeDate(match, date_format);
-            var token = self.contextualize(tokenName, match);
-            var replacement = "{" + token + "}";
-            text = text.replace(match, replacement);
-          });
-        }
+        text = self.tokenizeMatches(text, matches, tokenName);
       });
     }
 
@@ -2118,19 +2117,37 @@ DomTokenizer.prototype = {
       rules.forEach(function (rule) {
         if (rule.enabled) {
           var matches = text.match(rule.regex);
-          if (matches) {
-            matches.forEach(function (match) {
-              var value = match.trim();
-              if (value !== '') {
-                var token = self.contextualize(rule.name, value);
-                var replacement = match.replace(value, "{" + token + "}");
-                text = text.replace(match, replacement);
-              }
-            });
-          }
+          text = self.tokenizeMatches(text, matches, rule.name);
         }
       });
     }
+    return text;
+  },
+
+  /**
+   * Replaces rule matches with tokens
+   *
+   * @param text
+   * @param matches
+   * @param token_name
+   * @returns {*}
+   */
+  tokenizeMatches: function(text, matches, token_name) {
+    if (!matches) return text;
+
+    var segmentStart = 0;
+    var self = this;
+    matches.forEach(function (match) {
+      var value = match.trim();
+      if (value !== '') {
+        var token = self.contextualize(token_name, value);
+        var replacement = match.replace(value, "{" + token + "}");
+        var segmentEnd = text.indexOf(value, segmentStart) + value.length;
+        text = utils.replaceBetween(segmentStart, segmentEnd, text, match, replacement);
+        segmentStart = segmentEnd + (replacement.length - value.length);
+      }
+    });
+
     return text;
   },
 
@@ -6337,13 +6354,14 @@ Application.prototype = {
       // }
 
       self.current_locale = self.getSupportedLocale(options.current_locale, options.accepted_locales, self.default_locale);
-      
+
       var locales = [self.default_locale];
       if (self.current_locale != self.default_locale) {
         locales.push(self.current_locale);
       }
 
-      //console.log("Current locale: ", self.current_locale);
+      console.log("Current locale: ", self.current_locale);
+      console.log("Default locale: ", self.default_locale);
 
       var sources = [self.current_source || 'index'];
       self.initData(locales, sources, callback);
@@ -11286,6 +11304,29 @@ module.exports = {
       qs.push(p + "=" + encodeURIComponent(obj[p]));
     }
     return qs.join("&");
+  },
+
+  /**
+   * Replaces values only in the range specified, leaving all other values as they are.
+   *
+   * For example:
+   *
+   * replaceBetween(6, 10, "I have 5 apples and 5 oranges.", "5", "9");
+   *
+   * will result in "I have 9 apples and 5 oranges."
+   *
+   * @param start
+   * @param end
+   * @param string
+   * @param searchValue
+   * @param replaceValue
+   * @returns {*}
+   */
+  replaceBetween: function(start, end, string, searchValue, replaceValue) {
+    var prefix = string.substring(0, start);
+    var focus = string.substring(start, end);
+    var suffix = string.substring(end);
+    return  prefix + focus.replace(searchValue, replaceValue) + suffix;
   },
 
   parallel: function(funcs, callback) {
