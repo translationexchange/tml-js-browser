@@ -705,8 +705,6 @@ var helpers = {
 
       // locale must be extracted from pre-path
       if (locale_method.strategy == 'pre-path') {
-        console.log("Figuring out the locale....");
-
         tml.logger.debug("extracting locale from pre-path");
         var fragments = window.location.pathname.split('/').filter(function (n) {
           return n !== '';
@@ -6354,14 +6352,13 @@ Application.prototype = {
       // }
 
       self.current_locale = self.getSupportedLocale(options.current_locale, options.accepted_locales, self.default_locale);
-
+      
       var locales = [self.default_locale];
       if (self.current_locale != self.default_locale) {
         locales.push(self.current_locale);
       }
 
-      console.log("Current locale: ", self.current_locale);
-      console.log("Default locale: ", self.default_locale);
+      //console.log("Current locale: ", self.current_locale);
 
       var sources = [self.current_source || 'index'];
       self.initData(locales, sources, callback);
