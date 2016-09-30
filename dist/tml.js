@@ -1892,6 +1892,14 @@ DomTokenizer.prototype = {
     config.translator_options.attributes.labels.forEach(function(attr){
       if(node.hasAttribute(attr)) {self.replaceAttributes(node, attr);}
     });
+
+    if (node.nodeName == 'INPUT') {
+      var type = (node.getAttribute('type') || '').toLowerCase();
+      var value = node.getAttribute('value');
+
+      if (value && (type == 'submit' || type == 'button'))
+        self.replaceAttributes(node, 'value');
+    }
   },
 
 
