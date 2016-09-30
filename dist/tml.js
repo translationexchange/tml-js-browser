@@ -1994,12 +1994,12 @@ DomTokenizer.prototype = {
 
     if (this.getOption("debug"))
       translation = this.debugTranslation(tml);
-    else if (opts['label'])
+    else if (opts.label)
       translation = window.trl(tml, data, this.options);
     else
       translation = window.tr(tml, data, this.options);
 
-    if (opts['reset'])
+    if (opts.reset)
       this.resetContext();
 
     return translation;
