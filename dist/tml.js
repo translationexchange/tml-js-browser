@@ -1985,7 +1985,7 @@ DomTokenizer.prototype = {
     data = data || this.tokens;
 
     // if (!this.isValidTml(tml)) return null;
-    // console.log(tml, data);
+    console.log(tml, data);
 
     var translation = tml;
     tml = tml.replace(/[\n]/g, '').replace(/\s\s+/g, ' ').trim();
