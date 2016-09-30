@@ -2107,9 +2107,7 @@ DomTokenizer.prototype = {
       formats.forEach(function(format) {
         var regex = format[0];
         //var date_format = format[1];
-
-        var matches = text.match(regex);
-        text = self.tokenizeMatches(text, matches, tokenName);
+        text = self.tokenizeByRule(text, regex, tokenName);
       });
     }
 
@@ -2117,8 +2115,7 @@ DomTokenizer.prototype = {
     if (rules) {
       rules.forEach(function (rule) {
         if (rule.enabled) {
-          var matches = text.match(rule.regex);
-          text = self.tokenizeMatches(text, matches, rule.name);
+          text = self.tokenizeByRule(text, rule.regex, rule.name);
         }
       });
     }
@@ -2129,23 +2126,30 @@ DomTokenizer.prototype = {
    * Replaces rule matches with tokens
    *
    * @param text
-   * @param matches
-   * @param token_name
+   * @param regex
+   * @param tokenName
    * @returns {*}
    */
-  tokenizeMatches: function(text, matches, token_name) {
-    if (!matches) return text;
+  tokenizeByRule: function(text, regex, tokenName) {
+    var matches = utils.extractMatches(text, regex);
+    if (!matches || matches.length == 0) return text;
 
-    var segmentStart = 0;
     var self = this;
+    var index = matches.length - 1;
+    matches = matches.reverse();
     matches.forEach(function (match) {
-      var value = match.trim();
+      var value = match.value.trim();
+
       if (value !== '') {
-        var token = self.contextualize(token_name, value);
-        var replacement = match.replace(value, "{" + token + "}");
-        var segmentEnd = text.indexOf(value, segmentStart) + value.length;
-        text = utils.replaceBetween(segmentStart, segmentEnd, text, match, replacement);
-        segmentStart = segmentEnd + (replacement.length - value.length);
+        var token = tokenName;
+        if (index > 0) {
+          token = tokenName + index;
+          index --;
+        }
+        self.tokens[token] = value;
+
+        var replacement = match.value.replace(value, "{" + token + "}");
+        text = utils.replaceBetween(text, match.start, match.end, replacement);
       }
     });
 
@@ -11322,11 +11326,37 @@ module.exports = {
    * @param replaceValue
    * @returns {*}
    */
-  replaceBetween: function(start, end, string, searchValue, replaceValue) {
+  replaceBetween: function(string, start, end, replaceValue, searchValue) {
     var prefix = string.substring(0, start);
     var focus = string.substring(start, end);
     var suffix = string.substring(end);
-    return  prefix + focus.replace(searchValue, replaceValue) + suffix;
+
+    if (searchValue!=null)
+      return  prefix + focus.replace(searchValue, replaceValue) + suffix;
+
+    return  prefix + replaceValue + suffix;
+  },
+
+  /**
+   * Use regular expression to extract matches from a string
+   *
+   * @param value
+   * @param regex
+   * @returns {Array}
+   */
+  extractMatches: function(value, regex) {
+    var match, matches= [];
+    while (match = regex.exec(value)) {
+      var info = {
+        start: match.index,
+        end: match.index + match[0].length
+
+      };
+      info.value = value.substring(info.start, info.end);
+      matches.push(info);
+    }
+
+    return matches;
   },
 
   parallel: function(funcs, callback) {
