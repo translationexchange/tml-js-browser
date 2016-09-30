@@ -1961,7 +1961,7 @@ DomTokenizer.prototype = {
       if (sentences) {
         var self = this;
         sentences.forEach(function (sentence) {
-          var sentenceTranslation = self.translateTmlFragment(sentence, data, label);
+          var sentenceTranslation = self.translateTmlFragment(sentence, data, {label: label});
           if (sentenceTranslation)
             translation = translation.replace(sentence, sentenceTranslation);
         });
@@ -1969,7 +1969,7 @@ DomTokenizer.prototype = {
       }
     }
 
-    return this.translateTmlFragment(tml, data, label);
+    return this.translateTmlFragment(tml, data, {label: label, reset: true});
   },
 
   /**
@@ -1977,20 +1977,31 @@ DomTokenizer.prototype = {
    *
    * @param tml
    * @param data
-   * @param label
+   * @param opts
    * @returns {*}
    */
-  translateTmlFragment: function(tml, data, label) {
+  translateTmlFragment: function(tml, data, opts) {
+    opts = opts || {};
+
     tml = this.generateDataTokens(tml);
     data = data || this.tokens;
 
     // if (!this.isValidTml(tml)) return null;
-    console.log(tml, data);
+    // console.log(tml, data);
 
     var translation = tml;
     tml = tml.replace(/[\n]/g, '').replace(/\s\s+/g, ' ').trim();
-    translation = this.getOption("debug") ? this.debugTranslation(tml) : window[label ? "trl" : "tr"](tml, data, this.options);
-    this.resetContext();
+
+    if (this.getOption("debug"))
+      translation = this.debugTranslation(tml);
+    else if (opts['label'])
+      translation = window.trl(tml, data, this.options);
+    else
+      translation = window.tr(tml, data, this.options);
+
+    if (opts['reset'])
+      this.resetContext();
+
     return translation;
   },
 
