@@ -1246,8 +1246,6 @@ module.exports = {
           }
         }, options);
 
-        console.log(tml.config);
-
         options.fetch_version = (options.cache.adapter == 'browser' && !cache_version);
 
         tml.config.initCache(options.key);
