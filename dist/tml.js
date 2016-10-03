@@ -837,8 +837,12 @@ module.exports = {
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code", "kbd"];
-var separators  = ["br", "hr"];
+var tml         = require('tml-js');
+var config      = tml.config;
+var utils       = tml.utils;
+
+// var inline      = ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code", "kbd"];
+// var separators  = ["br", "hr"];
 
 module.exports = {
 
@@ -853,6 +857,17 @@ module.exports = {
   },
 
   /**
+   * Returns back config option value
+   *
+   * @param name
+   * @returns {*}
+   * @param default_value
+   */
+  getOption: function(name, default_value) {
+    return utils.hashValue(config.translator_options, name) || default_value;
+  },
+
+  /**
    * Checks if node is inline
    *
    * @param node
@@ -862,7 +877,8 @@ module.exports = {
     return (
       node.nodeType == 1 &&
       !node.hasAttribute('isolate') &&
-      inline.indexOf(node.tagName.toLowerCase()) != -1 &&
+      this.getOption('nodes.inline').indexOf(node.tagName.toLowerCase()) != -1 &&
+      // inline.indexOf(node.tagName.toLowerCase()) != -1 &&
       !this.isOnlyChild(node)
     );
   },
@@ -977,7 +993,8 @@ module.exports = {
    */
   isSeparator: function(node) {
     if (!node) return false;
-    return (node.nodeType == 1 && separators.indexOf(node.tagName.toLowerCase()) != -1);
+    // return (node.nodeType == 1 && separators.indexOf(node.tagName.toLowerCase()) != -1);
+    return (node.nodeType == 1 && this.getOption('nodes.splitters').indexOf(node.tagName.toLowerCase()) != -1);
   },
 
   /**
@@ -1061,7 +1078,7 @@ module.exports = {
 };
 
 
-},{}],6:[function(require,module,exports){
+},{"tml-js":34}],6:[function(require,module,exports){
 /**
  * Copyright (c) 2016 Translation Exchange, Inc.
  *
@@ -1228,6 +1245,8 @@ module.exports = {
             version_check_interval: options.version_check_interval || 60 // browser will default to every 60 sec
           }
         }, options);
+
+        console.log(tml.config);
 
         options.fetch_version = (options.cache.adapter == 'browser' && !cache_version);
 
@@ -1956,20 +1975,35 @@ DomTokenizer.prototype = {
   },
 
   /**
+   * Treat new lines like the browser would - replace them with spaces.
+   * Remove all double spaces to single spaces.
+   *
+   * @param tml
+   * @returns {XML|string|*}
+   */
+  normalizeTml: function(tml) {
+    tml = tml.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
+    return tml;
+  },
+
+  /**
    * Translates TML string with data tokens
    *
    * @param tml
    * @param data
    * @returns {*}
    */
-  translateTml: function(tml, data, label) {
+  translateTml: function(tml, data, isLabel) {
+
+    tml = this.normalizeTml(tml);
+
     if (this.getOption("split_sentences")) {
       var translation = tml;
       var sentences = utils.splitSentences(tml);
       if (sentences) {
         var self = this;
         sentences.forEach(function (sentence) {
-          var sentenceTranslation = self.translateTmlFragment(sentence, data, {label: label});
+          var sentenceTranslation = self.translateTmlFragment(sentence, data, {label: isLabel});
           if (sentenceTranslation)
             translation = translation.replace(sentence, sentenceTranslation);
         });
@@ -1977,7 +2011,7 @@ DomTokenizer.prototype = {
       }
     }
 
-    return this.translateTmlFragment(tml, data, {label: label, reset: true});
+    return this.translateTmlFragment(tml, data, {label: isLabel, reset: true});
   },
 
   /**
@@ -2048,7 +2082,7 @@ DomTokenizer.prototype = {
     var value = this.sanitizeValue(buffer);
 
     if (dom.isSelfClosing(node)){
-      tml = '{' + token + '}';
+      tml = ' {' + token + '} '; // the extra space is used when the span or i tags are injected. double space is taken care of later.
     } else {
       tml = '<' + token + '>' + value + '</' + token + '>';
     }
@@ -2132,9 +2166,12 @@ DomTokenizer.prototype = {
 
     var rules = this.getOption("data_tokens.rules");
     if (rules) {
+      var enabled_rules = this.getOption("data_tokens.enabled_rules");
       rules.forEach(function (rule) {
-        if (rule.enabled) {
-          text = self.tokenizeByRule(text, rule.regex, rule.name);
+        if (!enabled_rules || enabled_rules.indexOf(rule.name) != -1) {
+          if (rule.enabled) {
+            text = self.tokenizeByRule(text, rule.regex, rule.name);
+          }
         }
       });
     }
@@ -2150,7 +2187,7 @@ DomTokenizer.prototype = {
    * @returns {*}
    */
   tokenizeByRule: function(text, regex, tokenName) {
-    var matches = utils.extractMatches(text, regex);
+    var matches = utils.extractMatches(text, utils.toRegex(regex));
     if (!matches || matches.length === 0) return text;
 
     var self = this;
@@ -2234,7 +2271,7 @@ DomTokenizer.prototype = {
         return map;
 
       var name = node.tagName.toLowerCase();
-      name = map[name] ? map[name] : name;
+      name = map[name] ? map[name] : (map['*'] ? map['*'] : name);
       return name;
     }
     return "";
@@ -11354,6 +11391,29 @@ module.exports = {
       return  prefix + focus.replace(searchValue, replaceValue) + suffix;
 
     return  prefix + replaceValue + suffix;
+  },
+
+  /**
+   * Converts a string to a regular expression
+   *
+   * @param regex
+   * @returns {*}
+   */
+  toRegex: function(regex) {
+    if (!this.isString(regex))
+      return regex;
+
+    if (regex[0] == '/') {
+      if (regex.match(/\/.$/)) {
+        regex = new RegExp(regex.substring(1, regex.length - 2), regex[regex.length-1]);
+      } else {
+        regex = new RegExp(regex.substring(1, regex.length - 1));
+      }
+    } else {
+      regex = new RegExp(regex.substring(0, regex.length));
+    }
+
+    return regex;
   },
 
   /**
