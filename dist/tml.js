@@ -7907,9 +7907,6 @@ Language.prototype = {
 
   getSourceName: function(source) {
     var source_name = source.call && source() || source;
-    // limit source name to no more than 60 characters
-    if (source_name && source_name.length > 60)
-      source_name = source_name.substring(0, 60);
     return source_name;
   },
 
