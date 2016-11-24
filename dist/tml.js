@@ -579,11 +579,27 @@ var helpers = {
    * @param path
    * @returns {Array.<T>}
    */
-  getPathFragments: function (path) {
+  getPathFragments: function (path, remove_prefix) {
     path = path || window.location.pathname;
+
+    if (remove_prefix) {
+      tml.logger.debug("removing prefix from path: " + remove_prefix);
+      var re = new RegExp('^\/?' + remove_prefix.replace('/', '\/'));
+      path = path.replace(re, '');
+    }
+
     return path.split('/').filter(function (n) {
       return n !== '';
     });
+  },
+
+  /**
+   *
+   * @param locale
+   */
+  isValidLocale: function(locale) {
+    if (locale == null) return false;
+    return (locale.match(/^[a-z]{2}(-[A-Z]{2})?$/) !== null);
   },
 
   /**
@@ -601,9 +617,10 @@ var helpers = {
     }
 
     // for pre-path, remove the locale from path, and use the rest as the source
-    if (utils.isObject(locale_method) && locale_method.strategy == 'pre-path') {
-      var fragments = helpers.getPathFragments(current_source);
-      fragments.shift();
+    if (utils.isObject(locale_method)) {
+      var fragments = helpers.getPathFragments(current_source, locale_method.prefix);
+      if (locale_method.strategy == 'pre-path' && helpers.isValidLocale(fragments[0]))
+        fragments.shift();
       current_source = fragments.join('/');
     }
 
@@ -704,18 +721,26 @@ var helpers = {
       }
 
       // locale must be extracted from pre-path
+      // options: {
+      //    strategy:  'pre-path',
+      //    prefix:    '/wordpress'
+      // }
       if (locale_method.strategy == 'pre-path') {
         tml.logger.debug("extracting locale from pre-path");
-        var fragments = window.location.pathname.split('/').filter(function (n) {
-          return n !== '';
-        });
-        //console.log(elements);
-        return fragments[0];
+        var fragments = helpers.getPathFragments(window.location.pathname, locale_method.prefix);
+        if (helpers.isValidLocale(fragments[0]))
+          return fragments[0];
+        return null;
       }
 
+      // options: {
+      //    strategy:   'pre-domain'
+      // }
       if (locale_method.strategy == 'pre-domain') {
         var subdomains = window.location.hostname.split('.');
-        return subdomains[0];
+        if (helpers.isValidLocale(subdomains[0]))
+          return subdomains[0];
+        return null;
       }
 
       // options: {
