@@ -555,11 +555,6 @@ var helpers = {
   includeAgent: function (app, options, callback) {
     var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
 
-    if (options.cache) {
-      var t = new Date().getTime();
-      t = t - (t % options.cache);
-      agent_host += "?ts=" + t;
-    }
     if (options.enabled === false) {
       tml.logger.debug("agent disabled");
       return callback();
@@ -573,7 +568,7 @@ var helpers = {
     });
   },
 
-  /**
+  /**ch
    * Returns path fragments
    *
    * @param path
@@ -1323,7 +1318,6 @@ module.exports = {
             helpers.includeAgent(tml.app, {
               host: options.agent.host,
               enabled: options.agent.enabled,
-              cache: options.agent.cache || 864000000,
               domains: options.agent.domains || {},
               locale_strategy: options.locale,
               config: tml.config,
