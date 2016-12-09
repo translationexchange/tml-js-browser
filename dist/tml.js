@@ -1842,8 +1842,11 @@ DomTokenizer.prototype = {
 
     if(parent) {
 
-      if(translatables && !dom.matchesSelectors(parent, translatables, true)) {
-        return false;
+      // check if node is a translatable element
+      if(translatables){
+        if(!dom.matchesSelectors(parent, translatables, true)) {
+          return false;
+        }
       }
 
       tml         = nodes.map(function(n){text+=n.innerHTML || n.nodeValue;return this.generateTmlTags(n);}.bind(this)).join("");
