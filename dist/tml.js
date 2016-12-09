@@ -1960,11 +1960,10 @@ DomTokenizer.prototype = {
     var data          = this.tokens;
     var translation   = this.translateTml(tml, null, true);
     var translatables = this.getOption("translatable_elements");
-      // check if node is a translatable element
-    if(translatables){
-      if(!dom.matchesSelectors(node, translatables, true)) {
-        return false;
-      }
+    
+    // check if node is a translatable element
+    if(translatables && !dom.matchesSelectors(node, translatables, true)){
+      return false;
     }
 
     node.setAttribute(attr, translation);
