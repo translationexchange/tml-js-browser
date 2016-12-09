@@ -1833,12 +1833,19 @@ DomTokenizer.prototype = {
    */
   replaceNodes: function(nodes) {
 
+
+    var translatables = this.getOption("translatable_elements");
     var ti = document.createElement("tml:inline");
     var parent = nodes[0] && nodes[0].parentNode;
     var container;
     var tml, data, translation, text = "";
 
     if(parent) {
+
+      if(translatables && !dom.matchesSelectors(parent, translatables, true)) {
+        return false;
+      }
+
       tml         = nodes.map(function(n){text+=n.innerHTML || n.nodeValue;return this.generateTmlTags(n);}.bind(this)).join("");
       data        = this.tokens;
       translation = this.translateTml(tml);
@@ -1982,11 +1989,6 @@ DomTokenizer.prototype = {
     if (node.nodeType == 8) { return false; }
     if (node.nodeType == 3) { node = node.parentNode; }
     if (node.nodeType == 1) {
-
-      var translatables = this.getOption("translatable_elements");
-      if(translatables && !dom.matchesSelectors(node, translatables, true)) {
-        return false;
-      }
       return !dom.matchesSelectors(node, ([]).concat(
         (this.getOption("nodes.scripts") || []),
         (this.getOption("ignore_elements") || []),
