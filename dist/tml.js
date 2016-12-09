@@ -1956,9 +1956,16 @@ DomTokenizer.prototype = {
    * @param attr
    */
   replaceAttributes: function(node, attr){
-    var tml         = node.getAttribute(attr);
-    var data        = this.tokens;
-    var translation = this.translateTml(tml, null, true);
+    var tml           = node.getAttribute(attr);
+    var data          = this.tokens;
+    var translation   = this.translateTml(tml, null, true);
+    var translatables = this.getOption("translatable_elements");
+      // check if node is a translatable element
+    if(translatables){
+      if(!dom.matchesSelectors(node, translatables, true)) {
+        return false;
+      }
+    }
 
     node.setAttribute(attr, translation);
     this.contentCache.push({container: node, tml: tml, data: data, attribute: attr}); 
