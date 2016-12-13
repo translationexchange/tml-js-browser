@@ -639,17 +639,29 @@ var helpers = {
    * @returns {*}
    */
   getCurrentSource: function (options) {
-    var source_method = options.current_source || options.source;
+    var source_method = options.source || options.current_source;
+    var path = window.location.pathname;
+    if (path == '/') path = '/index';
 
     // current_source can be a function, hash or a string
     if (source_method) {
-      if (utils.isString(source_method))
+      if (utils.isString(source_method)) {
         return source_method;
+      }
 
-      if (utils.isFunction(source_method))
-        return source_method();
+      if (utils.isFunction(source_method)) {
+        return source_method(path);
+      }
 
-      // TODO: handle the hash method - for dynamic mapping using regular expressions
+      if (utils.isObject(source_method)) {
+        for (var exp in source_method) {
+          var re = new RegExp(exp);
+          if (path.match(re))
+             return source_method[exp];
+        }
+
+        return path;
+      }
     }
 
     return helpers.getDefaultSource(options);
@@ -1239,20 +1251,14 @@ module.exports = {
           browser: require('./cache_adapters/browser')
         });
 
+        options.current_source = helpers.getCurrentSource(options);
+        options.current_locale = helpers.getCurrentLocale(options);
+        options.current_translator = cookie.translator ? new tml.Translator(cookie.translator) : null;
+
         // updating options and configuring the SDK
         options = tml.utils.merge(tml.config, {
           delayed_flush: true,
           api: "ajax",
-
-          // current source can be a method, a hash or a string
-          current_source: helpers.getCurrentSource(options),
-
-          // for backwards compatibility we support current_locale - but we should switch documentation
-          // to user "locale" instead. "locale" now supports strategies
-          current_locale: helpers.getCurrentLocale(options),
-
-          // translator information can only be extracted from the cookie
-          current_translator: cookie.translator ? new tml.Translator(cookie.translator) : null,
 
           // get the list of locales from the browser
           accepted_locales: helpers.getBrowserLanguages(),
@@ -1319,6 +1325,7 @@ module.exports = {
               host: options.agent.host,
               enabled: options.agent.enabled,
               domains: options.agent.domains || {},
+              tools: options.agent.tools || {},
               locale_strategy: options.locale,
               config: tml.config,
               locale: tml.app.current_locale,
