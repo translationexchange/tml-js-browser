@@ -1820,7 +1820,7 @@ DomTokenizer.prototype = {
         if(item.attribute) {
           item.container.setAttribute(item.attribute, this.translateTml(item.tml, item.data, true));
         } else {
-          item.container.innerHTML = this.translateTml(item.tml, item.data);
+          item.container.innerHTML = this.translateTml(item.tml, item.data, this.isUnwrappable(item.container));
         }
       }
     }
@@ -1851,7 +1851,7 @@ DomTokenizer.prototype = {
 
       tml         = nodes.map(function(n){text+=n.innerHTML || n.nodeValue;return this.generateTmlTags(n);}.bind(this)).join("");
       data        = this.tokens;
-      translation = this.translateTml(tml);
+      translation = this.translateTml(tml, null, this.isUnwrappable(parent));
 
       if(!translation || this.isEmptyString(tml) || this.isUntranslatableText(text) || !this.isTranslatable(parent)) return;
 
@@ -2017,6 +2017,10 @@ DomTokenizer.prototype = {
   normalizeTml: function(tml) {
     tml = tml.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
     return tml;
+  },
+
+  isUnwrappable: function(node) {
+    return dom.matchesSelectors(node, 'svg', true);
   },
 
   /**
@@ -4397,7 +4401,7 @@ module.exports = {
     ignore_elements: ['.notranslate'],
     nodes: {
       ignored:    [],
-      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "svg", "ruby", "pre"],
+      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "ruby", "pre"],
       inline:     ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code"],
       short:      ["i", "b"],
       splitters:  ["br", "hr"]
