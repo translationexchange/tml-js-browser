@@ -568,6 +568,49 @@ var helpers = {
     });
   },
 
+  /**
+   * Add CSS to the page
+   *
+   * @param css
+   * @param id
+   */
+  addCss: function(css, id) {
+    var head = document.head || document.getElementsByTagName('head')[0];
+    var style = document.createElement('style');
+    style.type = 'text/css';
+    if (style.styleSheet) {
+      style.styleSheet.cssText = css;
+    } else {
+      style.appendChild(document.createTextNode(css));
+    }
+    head.appendChild(style);
+  },
+
+  /**
+   * Includes CSS for the project and current sources
+   *
+   * @param app
+   */
+  includeCss: function (app) {
+    if (app.current_locale) {
+      var current_language = app.languages_by_locale[app.current_locale];
+      if (current_language && current_language.configuration && current_language.configuration.css) {
+        tml.logger.debug("Adding language (" + current_language.locale + ") configuration: " + current_language.configuration.css);
+        helpers.addCss(current_language.configuration.css);
+      }
+    }
+
+    if (app.sources_by_key) {
+      Object.keys(app.sources_by_key).forEach(function(key) {
+        var source = app.sources_by_key[key];
+        if (source && source.configuration && source.configuration.css) {
+          tml.logger.debug("Adding source (" + source.source + ") configuration: " + source.configuration.css);
+          helpers.addCss(source.configuration.css);
+        }
+      });
+    }
+  },
+
   /**ch
    * Returns path fragments
    *
@@ -592,7 +635,7 @@ var helpers = {
    *
    * @param locale
    */
-  isValidLocale: function(locale) {
+  isValidLocale: function (locale) {
     if (locale == null) return false;
     return (locale.match(/^[a-z]{2}(-[A-Z]{2})?$/) !== null);
   },
@@ -657,7 +700,7 @@ var helpers = {
         for (var exp in source_method) {
           var re = new RegExp(exp);
           if (path.match(re))
-             return source_method[exp];
+            return source_method[exp];
         }
 
         return path;
@@ -835,6 +878,7 @@ module.exports = {
   getCookie: helpers.getCookie,
   setCookie: helpers.setCookie,
   includeLs: helpers.includeLs,
+  includeCss: helpers.includeCss,
   includeAgent: helpers.includeAgent
 };
 },{"tml-js":34}],5:[function(require,module,exports){
@@ -1311,6 +1355,7 @@ module.exports = {
               helpers.includeLs(languageSelectorSettings);
             }
 
+
             //extend({}, options.agent, {
             //  locale_strategy: options.locale,
             //  config: tml.config,
@@ -1320,6 +1365,8 @@ module.exports = {
             //  css: tml.app.css,
             //  languages: tml.app.languages
             //});
+
+            helpers.includeCss(tml.app);
 
             helpers.includeAgent(tml.app, {
               host: options.agent.host,
@@ -2436,14 +2483,12 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
-(function (global){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
-/* eslint-disable no-proto */
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
@@ -2483,22 +2528,20 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
-  ? global.TYPED_ARRAY_SUPPORT
-  : (function () {
-      function Bar () {}
-      try {
-        var arr = new Uint8Array(1)
-        arr.foo = function () { return 42 }
-        arr.constructor = Bar
-        return arr.foo() === 42 && // typed array instances can be augmented
-            arr.constructor === Bar && // constructor can be set
-            typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
-            arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
-      } catch (e) {
-        return false
-      }
-    })()
+Buffer.TYPED_ARRAY_SUPPORT = (function () {
+  function Bar () {}
+  try {
+    var arr = new Uint8Array(1)
+    arr.foo = function () { return 42 }
+    arr.constructor = Bar
+    return arr.foo() === 42 && // typed array instances can be augmented
+        arr.constructor === Bar && // constructor can be set
+        typeof arr.subarray === 'function' && // chrome 9-10 lack `subarray`
+        arr.subarray(1, 1).byteLength === 0 // ie10 has broken `subarray`
+  } catch (e) {
+    return false
+  }
+})()
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -2654,16 +2697,10 @@ function fromJsonObject (that, object) {
   return that
 }
 
-if (Buffer.TYPED_ARRAY_SUPPORT) {
-  Buffer.prototype.__proto__ = Uint8Array.prototype
-  Buffer.__proto__ = Uint8Array
-}
-
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
-    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -3980,7 +4017,6 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -4321,81 +4357,121 @@ module.exports = {
   debug: false,
 
   default_tokens: {
-    html : {
-      data : {
-        ndash  :  "&ndash;",  
-        mdash  :  "&mdash;",  
-        iexcl  :  "&iexcl;",  
-        iquest :  "&iquest;", 
-        quot   :  "&quot;",   
-        ldquo  :  "&ldquo;",  
-        rdquo  :  "&rdquo;",  
-        lsquo  :  "&lsquo;",  
-        rsquo  :  "&rsquo;",  
-        laquo  :  "&laquo;",  
-        raquo  :  "&raquo;",  
-        nbsp   :  "&nbsp;",   
-        lsaquo :  "&lsaquo;", 
-        rsaquo :  "&rsaquo;", 
-        br     :  "<br/>",    
-        lbrace :  "{",
-        rbrace :  "}",
-        trade  :  "&trade;"
+    html: {
+      data: {
+        ndash: "&ndash;",
+        mdash: "&mdash;",
+        iexcl: "&iexcl;",
+        iquest: "&iquest;",
+        quot: "&quot;",
+        ldquo: "&ldquo;",
+        rdquo: "&rdquo;",
+        lsquo: "&lsquo;",
+        rsquo: "&rsquo;",
+        laquo: "&laquo;",
+        raquo: "&raquo;",
+        nbsp: "&nbsp;",
+        lsaquo: "&lsaquo;",
+        rsaquo: "&rsaquo;",
+        br: "<br/>",
+        lbrace: "{",
+        rbrace: "}",
+        trade: "&trade;"
       },
-      decoration : {
-        strong :  "<strong>{$0}</strong>",
-        bold   :  "<strong>{$0}</strong>",
-        b      :  "<strong>{$0}</strong>",
-        em     :  "<em>{$0}</em>",
-        italic :  "<i>{$0}</i>",
-        i      :  "<i>{$0}</i>",
-        link   :  "<a href='{$href}' class='{$class}' style='{$style}'>{$0}</a>",
-        br     :  "<br>{$0}",
-        strike :  "<strike>{$0}</strike>",
-        div    :  "<div id='{$id}' class='{$class}' style='{$style}'>{$0}</div>",
-        span   :  "<span id='{$id}' class='{$class}' style='{$style}'>{$0}</span>",
-        h1     :  "<h1>{$0}</h1>",
-        h2     :  "<h2>{$0}</h2>",
-        h3     :  "<h3>{$0}</h3>"
+      decoration: {
+        strong: "<strong>{$0}</strong>",
+        bold: "<strong>{$0}</strong>",
+        b: "<strong>{$0}</strong>",
+        em: "<em>{$0}</em>",
+        italic: "<i>{$0}</i>",
+        i: "<i>{$0}</i>",
+        link: "<a href='{$href}' class='{$class}' style='{$style}'>{$0}</a>",
+        br: "<br>{$0}",
+        strike: "<strike>{$0}</strike>",
+        div: "<div id='{$id}' class='{$class}' style='{$style}'>{$0}</div>",
+        span: "<span id='{$id}' class='{$class}' style='{$style}'>{$0}</span>",
+        h1: "<h1>{$0}</h1>",
+        h2: "<h2>{$0}</h2>",
+        h3: "<h3>{$0}</h3>"
       }
     },
-    text : {
-      data : {
-        ndash  :  "–",
-        mdash  :  "-",
-        iexcl  :  "¡",
-        iquest :  "¿",
-        quot   :  "\"",
-        ldquo  :  "“",
-        rdquo  :  "”",
-        lsquo  :  "‘",
-        rsquo  :  "’",
-        laquo  :  "«",
-        raquo  :  "»",
-        nbsp   :  " ",
-        lsaquo :  "‹",
-        rsaquo :  "›",
-        br     :  "\n",
-        lbrace :  "{",
-        rbrace :  "}",
-        trade  :  "™"
+    text: {
+      data: {
+        ndash: "–",
+        mdash: "-",
+        iexcl: "¡",
+        iquest: "¿",
+        quot: "\"",
+        ldquo: "“",
+        rdquo: "”",
+        lsquo: "‘",
+        rsquo: "’",
+        laquo: "«",
+        raquo: "»",
+        nbsp: " ",
+        lsaquo: "‹",
+        rsaquo: "›",
+        br: "\n",
+        lbrace: "{",
+        rbrace: "}",
+        trade: "™"
       },
-      decoration : {
-        strong :  "{$0}",
-        bold   :  "{$0}",
-        b      :  "{$0}",
-        em     :  "{$0}",
-        italic :  "{$0}",
-        i      :  "{$0}",
-        link   :  "{$0}{$1}",
-        br     :  "\n{$0}",
-        strike :  "{$0}",
-        div    :  "{$0}",
-        span   :  "{$0}",
-        h1     :  "{$0}",
-        h2     :  "{$0}",
-        h3     :  "{$0}"
+      decoration: {
+        strong: "{$0}",
+        bold: "{$0}",
+        b: "{$0}",
+        em: "{$0}",
+        italic: "{$0}",
+        i: "{$0}",
+        link: "{$0}{$1}",
+        br: "\n{$0}",
+        strike: "{$0}",
+        div: "{$0}",
+        span: "{$0}",
+        h1: "{$0}",
+        h2: "{$0}",
+        h3: "{$0}"
       }
+    }
+  },
+
+  localization: {
+    default_day_names: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    default_abbr_day_names: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    default_month_names: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+    default_abbr_month_names: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    custom_date_formats: {
+      default: '%m/%d/%Y',            // 07/4/2008
+      short_numeric: '%m/%d',               // 07/4
+      short_numeric_year: '%m/%d/%y',            // 07/4/08
+      long_numeric: '%m/%d/%Y',            // 07/4/2008
+      verbose: '%A, %B %d, %Y',       // Friday, July  4, 2008
+      monthname: '%B %d',               // July 4
+      monthname_year: '%B %d, %Y',           // July 4, 2008
+      monthname_abbr: '%b %d',               // Jul 4
+      monthname_abbr_year: '%b %d, %Y',           // Jul 4, 2008
+      date_time: '%m/%d/%Y at %H%M'     // 01/03/1010 at 530
+    },
+    token_mapping: {
+      '%a': '{short_week_day_name}',
+      '%A': '{week_day_name}',
+      '%b': '{short_month_name}',
+      '%B': '{month_name}',
+      '%p': '{am_pm}',
+      '%d': '{days}',
+      '%e': '{day_of_month}',
+      '%j': '{year_days}',
+      '%m': '{months}',
+      '%W': '{week_num}',
+      '%w': '{week_days}',
+      '%y': '{short_years}',
+      '%Y': '{years}',
+      '%l': '{trimed_hour}',
+      '%H': '{full_hours}',
+      '%I': '{short_hours}',
+      '%M': '{minutes}',
+      '%S': '{seconds}',
+      '%s': '{since_epoch}'
     }
   },
 
@@ -4406,12 +4482,13 @@ module.exports = {
     split_sentences: true,
     decoration_token_format: "[]",
     ignore_elements: ['.notranslate'],
+    translatable_elements: null,
     nodes: {
-      ignored:    [],
-      scripts:    ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "ruby", "pre"],
-      inline:     ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code"],
-      short:      ["i", "b"],
-      splitters:  ["br", "hr"]
+      ignored: [],
+      scripts: ["iframe", "script", "noscript", "style", "audio", "video", "map", "object", "track", "embed", "ruby", "pre"],
+      inline: ["a", "span", "i", "b", "img", "strong", "s", "em", "u", "sub", "sup", "var", "code"],
+      short: ["i", "b"],
+      splitters: ["br", "hr"]
     },
     attributes: {
       labels: ["title", "alt", "placeholder"]
@@ -4438,11 +4515,19 @@ module.exports = {
         name: 'date'
       },
       rules: [
-        {enabled: true, name: 'phone',    regex: /(\d{1}-)?\d{3}-\d{3}-\d{4}|\d?\(\d{3}\)\s*\d{3}-\d{4}|(\d.)?\d{3}.\d{3}.\d{4}/g},
-        {enabled: true, name: 'email',    regex: /[-a-z0-9~!$%^&*_=+}{\'?]+(\.[-a-z0-9~!$%^&*_=+}{\'?]+)*@([a-z0-9_][-a-z0-9_]*(\.[-a-z0-9_]+)*\.(aero|arpa|biz|com|coop|edu|gov|info|int|mil|museum|name|net|org|pro|travel|io|mobi|[a-z][a-z])|([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}))(:[0-9]{1,5})?/g},
-        {enabled: true, name: 'price',    regex: /\$\d*(,\d*)*(\.\d*)?/g},
+        {
+          enabled: true,
+          name: 'phone',
+          regex: /(\d{1}-)?\d{3}-\d{3}-\d{4}|\d?\(\d{3}\)\s*\d{3}-\d{4}|(\d.)?\d{3}.\d{3}.\d{4}/g
+        },
+        {
+          enabled: true,
+          name: 'email',
+          regex: /[-a-z0-9~!$%^&*_=+}{\'?]+(\.[-a-z0-9~!$%^&*_=+}{\'?]+)*@([a-z0-9_][-a-z0-9_]*(\.[-a-z0-9_]+)*\.(aero|arpa|biz|com|coop|edu|gov|info|int|mil|museum|name|net|org|pro|travel|io|mobi|[a-z][a-z])|([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}))(:[0-9]{1,5})?/g
+        },
+        {enabled: true, name: 'price', regex: /\$\d*(,\d*)*(\.\d*)?/g},
         {enabled: true, name: 'fraction', regex: /\d+\/\d+/g},
-        {enabled: true, name: 'num',      regex: /\b\d+(,\d*)*(\.\d*)?%?\b/g}
+        {enabled: true, name: 'num', regex: /\b\d+(,\d*)*(\.\d*)?%?\b/g}
       ]
     }
   },
@@ -4458,9 +4543,9 @@ module.exports = {
     },
     genders: {
       variables: {
-        "@genders": function(list) {
+        "@genders": function (list) {
           var genders = [];
-          list.forEach(function(obj) {
+          list.forEach(function (obj) {
             genders.push(obj.gender);
           });
           return genders;
@@ -6009,6 +6094,11 @@ ApiClient.prototype = {
    * @param callback
    */
   getCacheVersion: function (callback) {
+    // if cache version is hardcoded in the config, don't need to check it
+    if (this.cache.adapter && this.cache.adapter.config && this.cache.adapter.config.version) {
+      this.cache.version = this.cache.adapter.config.version;
+    }
+
     // check version in the memory cache first
     if (this.cache.version && this.cache.version != 'undefined') {
       callback(this.cache.version);
@@ -6019,7 +6109,6 @@ ApiClient.prototype = {
 
     // get version from local cache
     this.cache.fetchVersion(function (version_data) {
-
       // check timestamp for the version
       var needs_version_check = false;
       if (version_data.t) {
@@ -6071,7 +6160,8 @@ ApiClient.prototype = {
       if (!data || data.match(/xml/)) error = 'Not found';
 
       if (error || !data) {
-        callback(error, null);
+        // We want to store something in the cache so we don't keep trying to fetch it on every request
+        callback(error, {});
       } else {
         callback(null, data);
       }
@@ -6270,6 +6360,21 @@ Application.prototype = {
     utils.extend(this, data);
   },
 
+  /**
+   * Checks if app is disabled
+   *
+   * @returns {boolean}
+   */
+  isDisabled: function() {
+    return this.disabled;
+  },
+
+  /**
+   * Disables the app
+   */
+  disable: function() {
+    this.disabled = true;
+  },
   /**
    * addLanguage
    *
@@ -7589,27 +7694,32 @@ var HTMLDecorator = {
     options = options || {};
     if (!this.isEnabled(options)) return translated_label;
 
-    if (
-      (translation_key.application && translation_key.application.isFeatureEnabled("lock_original_content") && translation_key.language == target_language) ||
-      (translation_key.locked && !options.current_translator.manager)
-    ) return translated_label;
-
     var element = this.getDecorationElement('tml:label', options);
-    var classes = ['tml_translatable'];
+    var classes = [];
 
-    if (options.locked) {
-      if (options.current_translator && !options.current_translator.isFeatureEnabled("show_locked_keys"))
-          return translated_label;
+    if (translation_key.application && translation_key.application.isFeatureEnabled("lock_original_content") && translation_key.language == target_language) {
+      classes.push('tml_original');
+
+    } else if (translation_key.locked && !options.current_translator.manager) {
       classes.push('tml_locked');
-    } else if (translation_language.locale === translation_key.locale) {
-      if (options.pending)
-        classes.push('tml_pending');
-      else
-        classes.push('tml_not_translated');
-    } else if (translation_language.locale === target_language.locale) {
-      classes.push('tml_translated');
+
     } else {
-      classes.push('tml_fallback');
+      classes.push('tml_translatable');
+
+      if (options.locked) {
+        if (options.current_translator && !options.current_translator.isFeatureEnabled("show_locked_keys"))
+          return translated_label;
+        classes.push('tml_locked');
+      } else if (translation_language.locale === translation_key.locale) {
+        if (options.pending)
+          classes.push('tml_pending');
+        else
+          classes.push('tml_not_translated');
+      } else if (translation_language.locale === target_language.locale) {
+        classes.push('tml_translated');
+      } else {
+        classes.push('tml_fallback');
+      }
     }
 
     var html = [];
@@ -7909,7 +8019,11 @@ Language.prototype = {
     var params = utils.normalizeParams(label, description, tokens, options);
     if (!params.label)
       return '';
-    
+
+    if (utils.isDate(params.label)) {
+      return utils.localizeDate(params.label, utils.extend(params.options, {language: self}));
+    }
+
     var translation_key = new TranslationKey({
       label:        params.label,
       description:  params.description,
@@ -7963,6 +8077,7 @@ Language.prototype = {
   },
 
   getSourceName: function(source) {
+    if (!source) return 'index';
     var source_name = source.call && source() || source;
     return source_name;
   },
@@ -9006,6 +9121,7 @@ var Source = function(attrs) {
   this.key = utils.generateSourceKey(attrs.source);
   this.translations = {};
   this.ignored_keys = [];
+  this.configuration = {};
 };
 
 Source.prototype = {
@@ -9020,6 +9136,7 @@ Source.prototype = {
   },
 
   updateTranslations: function(locale, results) {
+    this.configuration = results && results.configuration ? results.configuration : {};
     this.ignored_keys = results && results.ignored_keys ? results.ignored_keys : [];
     results = results && results.results ? results.results : results;
 
@@ -11123,18 +11240,18 @@ module.exports = {
    * @param {string} key - dot separated nested key
    * @param {string} default_value - value to be returned if nothing is found
    */
-  hashValue: function(hash, key, default_value) {
+  hashValue: function (hash, key, default_value) {
     default_value = default_value || null;
     var parts = key.split(".");
-    for(var i=0; i<parts.length; i++) {
+    for (var i = 0; i < parts.length; i++) {
       var part = parts[i];
       if (typeof hash[part] === "undefined") return default_value;
       hash = hash[part];
     }
     return hash;
   },
-  
-  stripTags: function(input, allowed) {
+
+  stripTags: function (input, allowed) {
     allowed = (((allowed || '') + '')
       .toLowerCase()
       .match(/<[a-z][a-z0-9]*>/g) || [])
@@ -11142,12 +11259,12 @@ module.exports = {
     var tags = /<\/?([a-z][a-z0-9]*)\b[^>]*>/gi,
       commentsAndPhpTags = /<!--[\s\S]*?-->|<\?(?:php)?[\s\S]*?\?>/gi;
     return input.replace(commentsAndPhpTags, '')
-      .replace(tags, function($0, $1) {
+      .replace(tags, function ($0, $1) {
         return allowed.indexOf('<' + $1.toLowerCase() + '>') > -1 ? $0 : '';
       });
   },
 
-  escapeHtml: function(label) {
+  escapeHtml: function (label) {
     return label
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -11156,77 +11273,77 @@ module.exports = {
       .replace(/'/g, "&#039;");
   },
 
-  sanitizeString: function(string) {
+  sanitizeString: function (string) {
     if (!string) return "";
-    return string.replace(/^\s+|\s+$/g,"");
+    return string.replace(/^\s+|\s+$/g, "");
   },
 
-  splitSentences: function(text) {
+  splitSentences: function (text) {
     var sentenceRegex = /[^.!?\s][^.!?]*(?:[.!?](?![\'"]?\s|$)[^.!?]*)*[.!?]?[\'"]?(?=\s|$)/g;
     return text.match(sentenceRegex);
     //return this.stripTags(text).match(sentenceRegex);
   },
-  
-  unique: function(elements) {
+
+  unique: function (elements) {
     return elements.reverse().filter(function (e, i, arr) {
-      return arr.indexOf(e, i+1) === -1;
+      return arr.indexOf(e, i + 1) === -1;
     }).reverse();
   },
-  
-  clone: function(obj) {
-    if(obj === null || typeof obj == 'undefined' || typeof(obj) != 'object')
+
+  clone: function (obj) {
+    if (obj === null || typeof obj == 'undefined' || typeof(obj) != 'object')
       return obj;
-  
+
     var temp = obj.constructor(); // changed
-  
-    for(var key in obj)
+
+    for (var key in obj)
       temp[key] = clone(obj[key]);
     return temp;
   },
-  
-  keys: function(obj) {
-  //  var keys = []; for (k in obj) {keys.push(k)}
-  //  return keys;
+
+  keys: function (obj) {
+    //  var keys = []; for (k in obj) {keys.push(k)}
+    //  return keys;
     return Object.keys(obj);
   },
 
   swapKeys: function (obj) {
     var ret = {};
-    for(var key in obj){
+    for (var key in obj) {
       ret[obj[key]] = key;
     }
     return ret;
   },
 
-  generateSourceKey: function(label) {
-    if (this.isFunction(label)){
+  generateSourceKey: function (label) {
+    if (this.isFunction(label)) {
       label = label();
     }
     return md5(label);
   },
 
-  generateKey: function(label, description) {
+  generateKey: function (label, description) {
     description = description || "";
     return md5(label + ";;;" + description);
   },
 
-  escapeHTML: function(str) {
-    return str.replace(/[&<>]/g, function(tag) {
+  escapeHTML: function (str) {
+    return str.replace(/[&<>]/g, function (tag) {
       return {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;'
-      }[tag] || tag;
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;'
+        }[tag] || tag;
     });
   },
 
-  encode: function(params) {
+  encode: function (params) {
     if (!params) return null;
     var data = new Buffer(JSON.stringify(params), 'utf-8').toString('base64');
     return encodeURIComponent(data);
   },
 
-  decode: function(data) {
+  decode: function (data) {
     if (!data) return null;
     try {
       return JSON.parse(new Buffer(decodeURIComponent(data), 'base64').toString('utf-8'));
@@ -11236,19 +11353,19 @@ module.exports = {
     }
   },
 
-  normalizeSource: function(url) {
+  normalizeSource: function (url) {
     var parts = url.split("?");
     return parts[0];
   },
 
-  normalizeParams: function(label, description, tokens, options) {
+  normalizeParams: function (label, description, tokens, options) {
     if (typeof label === "object") {
       return label;
     }
 
     if (typeof description !== "string") {
-      options     = tokens || {};
-      tokens      = description || {};
+      options = tokens || {};
+      tokens = description || {};
       description = '';
     }
 
@@ -11262,11 +11379,11 @@ module.exports = {
     };
   },
 
-  normalizePath: function(path) {
+  normalizePath: function (path) {
     return (path[0] == '/' ? '' : '/') + path;
   },
 
-  assign: function(destination, source, deep) {  
+  assign: function (destination, source, deep) {
     for (var key in source) {
       if (hasOwnProperty.call(source, key)) {
         if (deep && key in destination && typeof(destination[key]) == 'object' && typeof(source[key]) == 'object') {
@@ -11279,38 +11396,42 @@ module.exports = {
     return destination;
   },
 
-  extend: function(destination) {
-    for(var i=1; i<arguments.length; i++) {
+  extend: function (destination) {
+    for (var i = 1; i < arguments.length; i++) {
       destination = this.assign(destination, arguments[i]);
     }
     return destination;
   },
 
-  merge: function(destination) {
-    for(var i=1; i<arguments.length; i++) {
+  merge: function (destination) {
+    for (var i = 1; i < arguments.length; i++) {
       destination = this.assign(destination, arguments[i], true);
     }
     return destination;
   },
 
-  addCSS: function(doc, value, inline) {
+  addCSS: function (doc, value, inline) {
     var css = null;
     if (inline) {
-      css = doc.createElement('style'); css.type = 'text/css';
+      css = doc.createElement('style');
+      css.type = 'text/css';
       if (css.styleSheet) css.styleSheet.cssText = value;
       else css.appendChild(document.createTextNode(value));
     } else {
-      css = doc.createElement('link'); css.setAttribute('type', 'text/css');
-      css.setAttribute('rel', 'stylesheet'); css.setAttribute('media', 'screen');
+      css = doc.createElement('link');
+      css.setAttribute('type', 'text/css');
+      css.setAttribute('rel', 'stylesheet');
+      css.setAttribute('media', 'screen');
       css.setAttribute('href', value);
     }
     doc.getElementsByTagName('head')[0].appendChild(css);
     return css;
   },
 
-  addJS: function(doc, id, src, onload) {
+  addJS: function (doc, id, src, onload) {
     var script = doc.createElement('script');
-    script.setAttribute('id', id); script.setAttribute('type', 'application/javascript');
+    script.setAttribute('id', id);
+    script.setAttribute('type', 'application/javascript');
     script.setAttribute('src', src);
     script.setAttribute('charset', 'UTF-8');
     if (onload) script.onload = onload;
@@ -11318,23 +11439,23 @@ module.exports = {
     return script;
   },
 
-  getCookieName: function(key) {
+  getCookieName: function (key) {
     return "trex_" + key;
   },
 
-  getCookie: function(key) {
+  getCookie: function (key) {
     var cname = this.getCookieName(key);
     var name = cname + "=";
     var ca = document.cookie.split(';');
-    for(var i=0; i<ca.length; i++) {
+    for (var i = 0; i < ca.length; i++) {
       var c = ca[i];
-      while (c.charAt(0)==' ') c = c.substring(1);
-      if (c.indexOf(name) != -1) return c.substring(name.length,c.length);
+      while (c.charAt(0) == ' ') c = c.substring(1);
+      if (c.indexOf(name) != -1) return c.substring(name.length, c.length);
     }
     return "";
   },
 
-  setCookie: function(key, data) {
+  setCookie: function (key, data) {
     var cname = this.getCookieName(key);
     document.cookie = cname + "=" + data + "; path=/";
   },
@@ -11343,23 +11464,23 @@ module.exports = {
   // John Resig - http://ejohn.org/ - MIT Licensed
   /* jshint ignore:start */
   templateCache: {},
-  template: function(str, data) {
+  template: function (str, data) {
     var cache = this.templateCache;
     // Figure out if we're getting a template, or if we need to
     // load the template - and be sure to cache the result.
     var fn = !/\W/.test(str) ?
       cache[str] = cache[str] ||
-      this.template(document.getElementById(str).innerHTML) :
+        this.template(document.getElementById(str).innerHTML) :
 
       // Generate a reusable function that will serve as a template
       // generator (and which will be cached).
       new Function("obj",
         "var p=[],print=function(){p.push.apply(p,arguments);};" +
 
-          // Introduce the data as local variables using with(){}
+        // Introduce the data as local variables using with(){}
         "with(obj){p.push('" +
 
-          // Convert the template into pure JavaScript
+        // Convert the template into pure JavaScript
         str
           .replace(/[\r\t\n]/g, " ")
           .split("<%").join("\t")
@@ -11371,38 +11492,43 @@ module.exports = {
         + "');}return p.join('');");
 
     // Provide some basic currying to the user
-    return data ? fn( data ) : fn;
+    return data ? fn(data) : fn;
   },
   /* jshint ignore:end */
 
-  element: function(element_id) {
+  element: function (element_id) {
     if (typeof element_id == 'string') return document.getElementById(element_id);
     return element_id;
   },
 
-  isNumber: function(str) {
+  isNumber: function (str) {
     return str.search(/^\s*\d+\s*$/) != -1;
   },
 
-  isArray: function(obj) {
+  isArray: function (obj) {
     if (obj === null || typeof obj == 'undefined') return false;
     return (obj.constructor.toString().indexOf("Array") !== -1);
   },
 
-  isObject: function(obj) {
+  isDate: function (obj) {
+    if (obj === null || typeof obj == 'undefined') return false;
+    return (obj.constructor.toString().indexOf("Date") !== -1);
+  },
+
+  isObject: function (obj) {
     if (obj === null || typeof obj == 'undefined') return false;
     return (typeof obj == 'object');
   },
 
-  isFunction: function(object) {
+  isFunction: function (object) {
     return (typeof object === "function");
   },
 
-  isString: function(obj) {
+  isString: function (obj) {
     return (typeof obj === 'string');
   },
 
-  isURL: function(str) {
+  isURL: function (str) {
     str = "" + str;
     return (str.indexOf("http://") != -1) || (str.indexOf("https://") != -1);
   },
@@ -11412,7 +11538,7 @@ module.exports = {
     if (typeof obj == 'string') return obj;
 
     var qs = [];
-    for(var p in obj) {
+    for (var p in obj) {
       qs.push(p + "=" + encodeURIComponent(obj[p]));
     }
     return qs.join("&");
@@ -11434,15 +11560,15 @@ module.exports = {
    * @param replaceValue
    * @returns {*}
    */
-  replaceBetween: function(string, start, end, replaceValue, searchValue) {
+  replaceBetween: function (string, start, end, replaceValue, searchValue) {
     var prefix = string.substring(0, start);
     var focus = string.substring(start, end);
     var suffix = string.substring(end);
 
-    if (searchValue!=null)
-      return  prefix + focus.replace(searchValue, replaceValue) + suffix;
+    if (searchValue != null)
+      return prefix + focus.replace(searchValue, replaceValue) + suffix;
 
-    return  prefix + replaceValue + suffix;
+    return prefix + replaceValue + suffix;
   },
 
   /**
@@ -11451,13 +11577,13 @@ module.exports = {
    * @param regex
    * @returns {*}
    */
-  toRegex: function(regex) {
+  toRegex: function (regex) {
     if (!this.isString(regex))
       return regex;
 
     if (regex[0] == '/') {
       if (regex.match(/\/.$/)) {
-        regex = new RegExp(regex.substring(1, regex.length - 2), regex[regex.length-1]);
+        regex = new RegExp(regex.substring(1, regex.length - 2), regex[regex.length - 1]);
       } else {
         regex = new RegExp(regex.substring(1, regex.length - 1));
       }
@@ -11475,8 +11601,8 @@ module.exports = {
    * @param regex
    * @returns {Array}
    */
-  extractMatches: function(value, regex) {
-    var match, matches= [];
+  extractMatches: function (value, regex) {
+    var match, matches = [];
     while (match = regex.exec(value)) {
       var info = {
         start: match.index,
@@ -11490,24 +11616,29 @@ module.exports = {
     return matches;
   },
 
-  parallel: function(funcs, callback) {
-    var k,i,l=0,c=0,r={},e = null;
-    var cb = function(k){
-      funcs[k](function(err, data){
-        if(err) return callback(err);
-        if(data) r[k] = data;
+  parallel: function (funcs, callback) {
+    var k, i, l = 0, c = 0, r = {}, e = null;
+    var cb = function (k) {
+      funcs[k](function (err, data) {
+        if (err) return callback(err);
+        if (data) r[k] = data;
         c++;
-        if(c == l) {
+        if (c == l) {
           callback(null, r);
         }
       });
     };
-    for(k in funcs) l++;
-    if(!l) callback(null,r);
-    for(k in funcs) {cb(k);}
+    for (k in funcs) l++;
+    if (!l) callback(null, r);
+    for (k in funcs) {
+      cb(k);
+    }
   },
 
-  localizeDate: function(date, format) {
+  localizeDate: function (date, opts) {
+    opts = opts || {};
+
+
     return date;
   }
 
