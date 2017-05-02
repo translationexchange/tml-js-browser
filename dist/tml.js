@@ -578,6 +578,7 @@ var helpers = {
     var head = document.head || document.getElementsByTagName('head')[0];
     var style = document.createElement('style');
     style.type = 'text/css';
+    style.id = id;
     if (style.styleSheet) {
       style.styleSheet.cssText = css;
     } else {
@@ -592,11 +593,13 @@ var helpers = {
    * @param app
    */
   includeCss: function (app) {
+    var css = [];
     if (app.current_locale) {
       var current_language = app.languages_by_locale[app.current_locale];
       if (current_language && current_language.configuration && current_language.configuration.css) {
         tml.logger.debug("Adding language (" + current_language.locale + ") configuration: " + current_language.configuration.css);
-        helpers.addCss(current_language.configuration.css);
+        css.push("/* Language Stylesheet (" + current_language.configuration.id + "): " + current_language.locale + " */");
+        css.push(current_language.configuration.css);
       }
     }
 
@@ -605,10 +608,13 @@ var helpers = {
         var source = app.sources_by_key[key];
         if (source && source.configuration && source.configuration.css) {
           tml.logger.debug("Adding source (" + source.source + ") configuration: " + source.configuration.css);
-          helpers.addCss(source.configuration.css);
+          css.push("/* Source Stylesheet (" + source.configuration.id + "): " + source.source + " locale: " + app.current_locale + "*/");
+          css.push(source.configuration.css);
         }
       });
     }
+
+    helpers.addCss(css.join("\n"), 'tml-stylesheet');
   },
 
   /**ch
