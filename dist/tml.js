@@ -1361,7 +1361,6 @@ module.exports = {
               helpers.includeLs(languageSelectorSettings);
             }
 
-
             //extend({}, options.agent, {
             //  locale_strategy: options.locale,
             //  config: tml.config,
@@ -2489,16 +2488,146 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 
 },{"../helpers/dom-helpers":5,"tml-js":34}],8:[function(require,module,exports){
+var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+;(function (exports) {
+	'use strict';
+
+  var Arr = (typeof Uint8Array !== 'undefined')
+    ? Uint8Array
+    : Array
+
+	var PLUS   = '+'.charCodeAt(0)
+	var SLASH  = '/'.charCodeAt(0)
+	var NUMBER = '0'.charCodeAt(0)
+	var LOWER  = 'a'.charCodeAt(0)
+	var UPPER  = 'A'.charCodeAt(0)
+	var PLUS_URL_SAFE = '-'.charCodeAt(0)
+	var SLASH_URL_SAFE = '_'.charCodeAt(0)
+
+	function decode (elt) {
+		var code = elt.charCodeAt(0)
+		if (code === PLUS ||
+		    code === PLUS_URL_SAFE)
+			return 62 // '+'
+		if (code === SLASH ||
+		    code === SLASH_URL_SAFE)
+			return 63 // '/'
+		if (code < NUMBER)
+			return -1 //no match
+		if (code < NUMBER + 10)
+			return code - NUMBER + 26 + 26
+		if (code < UPPER + 26)
+			return code - UPPER
+		if (code < LOWER + 26)
+			return code - LOWER + 26
+	}
+
+	function b64ToByteArray (b64) {
+		var i, j, l, tmp, placeHolders, arr
+
+		if (b64.length % 4 > 0) {
+			throw new Error('Invalid string. Length must be a multiple of 4')
+		}
+
+		// the number of equal signs (place holders)
+		// if there are two placeholders, than the two characters before it
+		// represent one byte
+		// if there is only one, then the three characters before it represent 2 bytes
+		// this is just a cheap hack to not do indexOf twice
+		var len = b64.length
+		placeHolders = '=' === b64.charAt(len - 2) ? 2 : '=' === b64.charAt(len - 1) ? 1 : 0
+
+		// base64 is 4/3 + up to two characters of the original data
+		arr = new Arr(b64.length * 3 / 4 - placeHolders)
+
+		// if there are placeholders, only get up to the last complete 4 chars
+		l = placeHolders > 0 ? b64.length - 4 : b64.length
+
+		var L = 0
+
+		function push (v) {
+			arr[L++] = v
+		}
+
+		for (i = 0, j = 0; i < l; i += 4, j += 3) {
+			tmp = (decode(b64.charAt(i)) << 18) | (decode(b64.charAt(i + 1)) << 12) | (decode(b64.charAt(i + 2)) << 6) | decode(b64.charAt(i + 3))
+			push((tmp & 0xFF0000) >> 16)
+			push((tmp & 0xFF00) >> 8)
+			push(tmp & 0xFF)
+		}
+
+		if (placeHolders === 2) {
+			tmp = (decode(b64.charAt(i)) << 2) | (decode(b64.charAt(i + 1)) >> 4)
+			push(tmp & 0xFF)
+		} else if (placeHolders === 1) {
+			tmp = (decode(b64.charAt(i)) << 10) | (decode(b64.charAt(i + 1)) << 4) | (decode(b64.charAt(i + 2)) >> 2)
+			push((tmp >> 8) & 0xFF)
+			push(tmp & 0xFF)
+		}
+
+		return arr
+	}
+
+	function uint8ToBase64 (uint8) {
+		var i,
+			extraBytes = uint8.length % 3, // if we have 1 byte left, pad 2 bytes
+			output = "",
+			temp, length
+
+		function encode (num) {
+			return lookup.charAt(num)
+		}
+
+		function tripletToBase64 (num) {
+			return encode(num >> 18 & 0x3F) + encode(num >> 12 & 0x3F) + encode(num >> 6 & 0x3F) + encode(num & 0x3F)
+		}
+
+		// go through the array every three bytes, we'll deal with trailing stuff later
+		for (i = 0, length = uint8.length - extraBytes; i < length; i += 3) {
+			temp = (uint8[i] << 16) + (uint8[i + 1] << 8) + (uint8[i + 2])
+			output += tripletToBase64(temp)
+		}
+
+		// pad the end with zeros, but make sure to not forget the extra bytes
+		switch (extraBytes) {
+			case 1:
+				temp = uint8[uint8.length - 1]
+				output += encode(temp >> 2)
+				output += encode((temp << 4) & 0x3F)
+				output += '=='
+				break
+			case 2:
+				temp = (uint8[uint8.length - 2] << 8) + (uint8[uint8.length - 1])
+				output += encode(temp >> 10)
+				output += encode((temp >> 4) & 0x3F)
+				output += encode((temp << 2) & 0x3F)
+				output += '='
+				break
+		}
+
+		return output
+	}
+
+	exports.toByteArray = b64ToByteArray
+	exports.fromByteArray = uint8ToBase64
+}(typeof exports === 'undefined' ? (this.base64js = {}) : exports))
+
+},{}],9:[function(require,module,exports){
+(function (global){
 /*!
  * The buffer module from node.js, for the browser.
  *
  * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
  * @license  MIT
  */
+/* eslint-disable no-proto */
+
+'use strict'
 
 var base64 = require('base64-js')
 var ieee754 = require('ieee754')
-var isArray = require('is-array')
+var isArray = require('isarray')
 
 exports.Buffer = Buffer
 exports.SlowBuffer = SlowBuffer
@@ -2534,7 +2663,11 @@ var rootParent = {}
  * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
  * get the Object implementation, which is slower but behaves correctly.
  */
-Buffer.TYPED_ARRAY_SUPPORT = (function () {
+Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined
+  ? global.TYPED_ARRAY_SUPPORT
+  : typedArraySupport()
+
+function typedArraySupport () {
   function Bar () {}
   try {
     var arr = new Uint8Array(1)
@@ -2547,7 +2680,7 @@ Buffer.TYPED_ARRAY_SUPPORT = (function () {
   } catch (e) {
     return false
   }
-})()
+}
 
 function kMaxLength () {
   return Buffer.TYPED_ARRAY_SUPPORT
@@ -2574,8 +2707,10 @@ function Buffer (arg) {
     return new Buffer(arg)
   }
 
-  this.length = 0
-  this.parent = undefined
+  if (!Buffer.TYPED_ARRAY_SUPPORT) {
+    this.length = 0
+    this.parent = undefined
+  }
 
   // Common case.
   if (typeof arg === 'number') {
@@ -2703,10 +2838,20 @@ function fromJsonObject (that, object) {
   return that
 }
 
+if (Buffer.TYPED_ARRAY_SUPPORT) {
+  Buffer.prototype.__proto__ = Uint8Array.prototype
+  Buffer.__proto__ = Uint8Array
+} else {
+  // pre-set for values that may exist in the future
+  Buffer.prototype.length = undefined
+  Buffer.prototype.parent = undefined
+}
+
 function allocate (that, length) {
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     // Return an augmented `Uint8Array` instance, for best performance
     that = Buffer._augment(new Uint8Array(length))
+    that.__proto__ = Buffer.prototype
   } else {
     // Fallback: Return an object instance of the Buffer class
     that.length = length
@@ -2849,10 +2994,6 @@ function byteLength (string, encoding) {
   }
 }
 Buffer.byteLength = byteLength
-
-// pre-set for values that may exist in the future
-Buffer.prototype.length = undefined
-Buffer.prototype.parent = undefined
 
 function slowToString (encoding, start, end) {
   var loweredCase = false
@@ -3495,7 +3636,7 @@ Buffer.prototype.writeUInt8 = function writeUInt8 (value, offset, noAssert) {
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 1, 0xff, 0)
   if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value)
-  this[offset] = value
+  this[offset] = (value & 0xff)
   return offset + 1
 }
 
@@ -3512,7 +3653,7 @@ Buffer.prototype.writeUInt16LE = function writeUInt16LE (value, offset, noAssert
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = value
+    this[offset] = (value & 0xff)
     this[offset + 1] = (value >>> 8)
   } else {
     objectWriteUInt16(this, value, offset, true)
@@ -3526,7 +3667,7 @@ Buffer.prototype.writeUInt16BE = function writeUInt16BE (value, offset, noAssert
   if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     this[offset] = (value >>> 8)
-    this[offset + 1] = value
+    this[offset + 1] = (value & 0xff)
   } else {
     objectWriteUInt16(this, value, offset, false)
   }
@@ -3548,7 +3689,7 @@ Buffer.prototype.writeUInt32LE = function writeUInt32LE (value, offset, noAssert
     this[offset + 3] = (value >>> 24)
     this[offset + 2] = (value >>> 16)
     this[offset + 1] = (value >>> 8)
-    this[offset] = value
+    this[offset] = (value & 0xff)
   } else {
     objectWriteUInt32(this, value, offset, true)
   }
@@ -3563,7 +3704,7 @@ Buffer.prototype.writeUInt32BE = function writeUInt32BE (value, offset, noAssert
     this[offset] = (value >>> 24)
     this[offset + 1] = (value >>> 16)
     this[offset + 2] = (value >>> 8)
-    this[offset + 3] = value
+    this[offset + 3] = (value & 0xff)
   } else {
     objectWriteUInt32(this, value, offset, false)
   }
@@ -3616,7 +3757,7 @@ Buffer.prototype.writeInt8 = function writeInt8 (value, offset, noAssert) {
   if (!noAssert) checkInt(this, value, offset, 1, 0x7f, -0x80)
   if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value)
   if (value < 0) value = 0xff + value + 1
-  this[offset] = value
+  this[offset] = (value & 0xff)
   return offset + 1
 }
 
@@ -3625,7 +3766,7 @@ Buffer.prototype.writeInt16LE = function writeInt16LE (value, offset, noAssert) 
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = value
+    this[offset] = (value & 0xff)
     this[offset + 1] = (value >>> 8)
   } else {
     objectWriteUInt16(this, value, offset, true)
@@ -3639,7 +3780,7 @@ Buffer.prototype.writeInt16BE = function writeInt16BE (value, offset, noAssert) 
   if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
     this[offset] = (value >>> 8)
-    this[offset + 1] = value
+    this[offset + 1] = (value & 0xff)
   } else {
     objectWriteUInt16(this, value, offset, false)
   }
@@ -3651,7 +3792,7 @@ Buffer.prototype.writeInt32LE = function writeInt32LE (value, offset, noAssert) 
   offset = offset | 0
   if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
   if (Buffer.TYPED_ARRAY_SUPPORT) {
-    this[offset] = value
+    this[offset] = (value & 0xff)
     this[offset + 1] = (value >>> 8)
     this[offset + 2] = (value >>> 16)
     this[offset + 3] = (value >>> 24)
@@ -3670,7 +3811,7 @@ Buffer.prototype.writeInt32BE = function writeInt32BE (value, offset, noAssert) 
     this[offset] = (value >>> 24)
     this[offset + 1] = (value >>> 16)
     this[offset + 2] = (value >>> 8)
-    this[offset + 3] = value
+    this[offset + 3] = (value & 0xff)
   } else {
     objectWriteUInt32(this, value, offset, false)
   }
@@ -3945,7 +4086,7 @@ function utf8ToBytes (string, units) {
       }
 
       // valid surrogate pair
-      codePoint = leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00 | 0x10000
+      codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000
     } else if (leadSurrogate) {
       // valid bmp char, but last char was a lead
       if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
@@ -4023,133 +4164,8 @@ function blitBuffer (src, dst, offset, length) {
   return i
 }
 
-},{"base64-js":9,"ieee754":10,"is-array":11}],9:[function(require,module,exports){
-var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-;(function (exports) {
-	'use strict';
-
-  var Arr = (typeof Uint8Array !== 'undefined')
-    ? Uint8Array
-    : Array
-
-	var PLUS   = '+'.charCodeAt(0)
-	var SLASH  = '/'.charCodeAt(0)
-	var NUMBER = '0'.charCodeAt(0)
-	var LOWER  = 'a'.charCodeAt(0)
-	var UPPER  = 'A'.charCodeAt(0)
-	var PLUS_URL_SAFE = '-'.charCodeAt(0)
-	var SLASH_URL_SAFE = '_'.charCodeAt(0)
-
-	function decode (elt) {
-		var code = elt.charCodeAt(0)
-		if (code === PLUS ||
-		    code === PLUS_URL_SAFE)
-			return 62 // '+'
-		if (code === SLASH ||
-		    code === SLASH_URL_SAFE)
-			return 63 // '/'
-		if (code < NUMBER)
-			return -1 //no match
-		if (code < NUMBER + 10)
-			return code - NUMBER + 26 + 26
-		if (code < UPPER + 26)
-			return code - UPPER
-		if (code < LOWER + 26)
-			return code - LOWER + 26
-	}
-
-	function b64ToByteArray (b64) {
-		var i, j, l, tmp, placeHolders, arr
-
-		if (b64.length % 4 > 0) {
-			throw new Error('Invalid string. Length must be a multiple of 4')
-		}
-
-		// the number of equal signs (place holders)
-		// if there are two placeholders, than the two characters before it
-		// represent one byte
-		// if there is only one, then the three characters before it represent 2 bytes
-		// this is just a cheap hack to not do indexOf twice
-		var len = b64.length
-		placeHolders = '=' === b64.charAt(len - 2) ? 2 : '=' === b64.charAt(len - 1) ? 1 : 0
-
-		// base64 is 4/3 + up to two characters of the original data
-		arr = new Arr(b64.length * 3 / 4 - placeHolders)
-
-		// if there are placeholders, only get up to the last complete 4 chars
-		l = placeHolders > 0 ? b64.length - 4 : b64.length
-
-		var L = 0
-
-		function push (v) {
-			arr[L++] = v
-		}
-
-		for (i = 0, j = 0; i < l; i += 4, j += 3) {
-			tmp = (decode(b64.charAt(i)) << 18) | (decode(b64.charAt(i + 1)) << 12) | (decode(b64.charAt(i + 2)) << 6) | decode(b64.charAt(i + 3))
-			push((tmp & 0xFF0000) >> 16)
-			push((tmp & 0xFF00) >> 8)
-			push(tmp & 0xFF)
-		}
-
-		if (placeHolders === 2) {
-			tmp = (decode(b64.charAt(i)) << 2) | (decode(b64.charAt(i + 1)) >> 4)
-			push(tmp & 0xFF)
-		} else if (placeHolders === 1) {
-			tmp = (decode(b64.charAt(i)) << 10) | (decode(b64.charAt(i + 1)) << 4) | (decode(b64.charAt(i + 2)) >> 2)
-			push((tmp >> 8) & 0xFF)
-			push(tmp & 0xFF)
-		}
-
-		return arr
-	}
-
-	function uint8ToBase64 (uint8) {
-		var i,
-			extraBytes = uint8.length % 3, // if we have 1 byte left, pad 2 bytes
-			output = "",
-			temp, length
-
-		function encode (num) {
-			return lookup.charAt(num)
-		}
-
-		function tripletToBase64 (num) {
-			return encode(num >> 18 & 0x3F) + encode(num >> 12 & 0x3F) + encode(num >> 6 & 0x3F) + encode(num & 0x3F)
-		}
-
-		// go through the array every three bytes, we'll deal with trailing stuff later
-		for (i = 0, length = uint8.length - extraBytes; i < length; i += 3) {
-			temp = (uint8[i] << 16) + (uint8[i + 1] << 8) + (uint8[i + 2])
-			output += tripletToBase64(temp)
-		}
-
-		// pad the end with zeros, but make sure to not forget the extra bytes
-		switch (extraBytes) {
-			case 1:
-				temp = uint8[uint8.length - 1]
-				output += encode(temp >> 2)
-				output += encode((temp << 4) & 0x3F)
-				output += '=='
-				break
-			case 2:
-				temp = (uint8[uint8.length - 2] << 8) + (uint8[uint8.length - 1])
-				output += encode(temp >> 10)
-				output += encode((temp >> 4) & 0x3F)
-				output += encode((temp << 2) & 0x3F)
-				output += '='
-				break
-		}
-
-		return output
-	}
-
-	exports.toByteArray = b64ToByteArray
-	exports.fromByteArray = uint8ToBase64
-}(typeof exports === 'undefined' ? (this.base64js = {}) : exports))
-
-},{}],10:[function(require,module,exports){
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"base64-js":8,"ieee754":10,"isarray":11}],10:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = nBytes * 8 - mLen - 1
@@ -4236,48 +4252,20 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
 }
 
 },{}],11:[function(require,module,exports){
+var toString = {}.toString;
 
-/**
- * isArray
- */
-
-var isArray = Array.isArray;
-
-/**
- * toString
- */
-
-var str = Object.prototype.toString;
-
-/**
- * Whether or not the given `val`
- * is an array.
- *
- * example:
- *
- *        isArray([]);
- *        // > true
- *        isArray(arguments);
- *        // > false
- *        isArray('');
- *        // > false
- *
- * @param {mixed} val
- * @return {bool}
- */
-
-module.exports = isArray || function (val) {
-  return !! val && '[object Array]' == str.call(val);
+module.exports = Array.isArray || function (arr) {
+  return toString.call(arr) == '[object Array]';
 };
 
 },{}],12:[function(require,module,exports){
 function E () {
-	// Keep this empty so it's easier to inherit from
+  // Keep this empty so it's easier to inherit from
   // (via https://github.com/lipsmack from https://github.com/scottcorgan/tiny-emitter/issues/3)
 }
 
 E.prototype = {
-	on: function (name, callback, ctx) {
+  on: function (name, callback, ctx) {
     var e = this.e || (this.e = {});
 
     (e[name] || (e[name] = [])).push({
@@ -4339,6 +4327,37 @@ E.prototype = {
 module.exports = E;
 
 },{}],13:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 module.exports = {
   "default_locale":"en",
   "languages":[
@@ -4354,6 +4373,37 @@ module.exports = {
   "css":".tml_not_translated { border-bottom: 1px dotted red; } .tml_translated { border-bottom: 1px dotted green; } .tml_fallback { border-bottom: 1px dotted #e90; } .tml_pending { border-bottom: 1px dotted #e90; } .tml_locked { border-bottom: 1px dotted blue; } .tml_language_case { padding:0px 2px; border: 1px dotted blue; border-radius: 2px; } .tml_token { background: #eee; padding:0px 2px; border: 1px dotted #ccc; border-radius: 2px; color: black; }"
 };
 },{}],14:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 module.exports = {
 
   enabled: true,
@@ -4385,6 +4435,7 @@ module.exports = {
         trade: "&trade;"
       },
       decoration: {
+        anchor: "<a href=''>{$0}</a>",
         strong: "<strong>{$0}</strong>",
         bold: "<strong>{$0}</strong>",
         b: "<strong>{$0}</strong>",
@@ -4538,36 +4589,102 @@ module.exports = {
     }
   },
 
-  context_rules: {
-    number: {
-      variables: {}
-    },
-    gender: {
-      variables: {
-        "@gender": "gender"
+  xmessage: {
+    decoration_tokens: ['anchor'],
+    data_tokens: ['param', 'number'],
+    choice_tokens: ['choice'],
+    map_tokens: ['map'],
+    context_rules: {
+      number: {
+        one: 'singular',
+        few: 'few',
+        many: 'many',
+        other: 'plural'
+      },
+      gender: {
+        male: 'male',
+        female: 'female',
+        neutral: 'neutral',
+        other: 'other'
+      },
+      date: {
+        future: 'future',
+        present: 'present',
+        past: 'past'
       }
-    },
-    genders: {
-      variables: {
-        "@genders": function (list) {
-          var genders = [];
-          list.forEach(function (obj) {
-            genders.push(obj.gender);
-          });
-          return genders;
+    }
+  },
+
+  context_rules:
+    {
+      number: {
+        variables: {}
+      }
+      ,
+      gender: {
+        variables: {
+          "@gender":
+            "gender"
         }
       }
-    },
-    date: {
-      variables: {}
-    },
-    time: {
-      variables: {}
-    }
-  }
+      ,
+      genders: {
+        variables: {
+          "@genders":
 
-};
+            function (list) {
+              var genders = [];
+              list.forEach(function (obj) {
+                genders.push(obj.gender);
+              });
+              return genders;
+            }
+        }
+      }
+      ,
+      date: {
+        variables: {}
+      }
+      ,
+      time: {
+        variables: {}
+      }
+    }
+
+}
+;
 },{}],15:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 module.exports = {
   "locale": "en",
   "english_name": "English",
@@ -5910,7 +6027,7 @@ module.exports = {
 };
 },{}],16:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -5980,7 +6097,7 @@ Base.prototype = {
 module.exports = Base;
 },{}],17:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6273,9 +6390,9 @@ ApiClient.prototype = {
 
 module.exports = ApiClient;
 
-},{"./api_adapters/base":16,"./configuration":21,"./logger":29,"./utils":44}],18:[function(require,module,exports){
+},{"./api_adapters/base":16,"./configuration":21,"./logger":29,"./utils":51}],18:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6554,7 +6671,7 @@ Application.prototype = {
       self.default_locale = self.default_locale || "en";
 
       // missing release
-      if (err) {
+      if (err || data.error) {
         self.extend(config.getDefaultApplication());
         self.addLanguage(config.getDefaultLanguage());
         callback(null);
@@ -6888,7 +7005,7 @@ Application.prototype = {
 
     var params = [];
 
-    var attributes = ["key", "label", "description", "locale", "level"];
+    var attributes = ["key", "label", "description", "locale", "level", "syntax"];
     for(var i=0; i<source_keys.length; i++) {
       var source_key = source_keys[i];
       var keys = utils.keys(this.missing_keys_by_source[source_key]);
@@ -6975,9 +7092,9 @@ Application.prototype = {
 
 module.exports = Application;
 
-},{"./api_client":17,"./configuration":21,"./language":24,"./logger":29,"./source":33,"./utils":44}],19:[function(require,module,exports){
+},{"./api_client":17,"./configuration":21,"./language":24,"./logger":29,"./source":33,"./utils":51}],19:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7176,9 +7293,9 @@ Cache.prototype = {
 };
 
 module.exports = Cache;
-},{"./cache_adapters/base":20,"./configuration":21,"./utils":44}],20:[function(require,module,exports){
+},{"./cache_adapters/base":20,"./configuration":21,"./utils":51}],20:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7233,46 +7350,99 @@ Base.prototype = {
   cached_by_source  : true,
   name              : "",
 
-  // check for version every hour - store number in seconds
+  /**
+   * Check for version every hour - store number in seconds
+   */
   version_check_interval: (60 * 60),
 
+  /**
+   * Initialize cache adapter
+   *
+   * @param config
+   */
   initialize: function(config) {
     this.config = config || {};
     this.cache = this.create();
   },
 
+  /**
+   *
+   */
   create: function(){
     logger.debug("Must be implemented by the extending class");
   },
 
+  /**
+   * Fetch value from cache
+   */
   fetch: function() {
     logger.debug("Must be implemented by the extending class");
   },
 
+  /**
+   * Store value in cache
+   *
+   * @param key
+   * @param value
+   */
   store: function(key, value){
     logger.debug("Must be implemented by the extending class");
   },
 
+  /**
+   * Delete value from cache
+   *
+   * @param key
+   */
   del: function(key) {
     logger.debug("Must be implemented by the extending class");
   },
 
+  /**
+   * Check if value exists in cache
+   *
+   * @param key
+   */
   exists: function(key) {
     logger.debug("Must be implemented by the extending class");
   },
 
+  /**
+   * Prtint a warning message
+   *
+   * @param msg
+   */
   warn: function(msg) {
     logger.debug(this.name + " - " + msg);
   },
 
+  /**
+   * Print an info message
+   *
+   * @param msg
+   */
   info: function(msg) {
     logger.debug(this.name + " - " + msg);
   },
 
+  /**
+   * Cache file name
+   *
+   * @param key
+   * @returns {string}
+   */
   fileName: function(key) {
     return key + '.json';
   },
 
+  /**
+   * Fetch default language value from cache
+   * todo: where is it being used?
+   *
+   * @param key
+   * @param fallback
+   * @param callback
+   */
   fetchDefault: function(key, fallback, callback) {
     var self = this;
     if (utils.isFunction(fallback)) {
@@ -7290,7 +7460,11 @@ Base.prototype = {
     }
   },
 
-  // pulls current stored version from cache
+  /**
+   * Pulls current stored version from cache
+   *
+   * @param callback
+   */
   fetchVersion: function(callback) {
     var self = this;
 
@@ -7311,6 +7485,12 @@ Base.prototype = {
     }
   },
 
+  /**
+   * Stores the current version back in cache
+   *
+   * @param version
+   * @param callback
+   */
   storeVersion: function(version, callback) {
     var self = this;
     self.version = version;
@@ -7386,9 +7566,9 @@ Base.prototype = {
 };
 
 module.exports = Base;
-},{"../configuration":21,"../logger":29,"../utils":44}],21:[function(require,module,exports){
+},{"../configuration":21,"../logger":29,"../utils":51}],21:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7418,14 +7598,14 @@ module.exports = Base;
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-var Cache     = require("./cache");
+var Cache = require("./cache");
 
-var utils     = require("./utils");
-var defaults  = require("./../config/defaults.js");
-var english  = require("./../config/english.js");
-var application  = require("./../config/application.js");
+var utils = require("./utils");
+var defaults = require("./../config/defaults.js");
+var english = require("./../config/english.js");
+var application = require("./../config/application.js");
 
-var Configuration = function() {
+var Configuration = function () {
   utils.merge(this, defaults);
 };
 
@@ -7437,7 +7617,7 @@ Configuration.prototype = {
    * @param key
    * @returns {Cache|exports|module.exports|*}
    */
-  initCache: function(key) {
+  initCache: function (key) {
     this.cache = this.cache || {};
     if (key) {
       this.cache.namespace = key.substring(0, 5);
@@ -7451,7 +7631,7 @@ Configuration.prototype = {
    *
    * @returns {Application}
    */
-  getDefaultApplication: function() {
+  getDefaultApplication: function () {
     return application;
   },
 
@@ -7460,7 +7640,7 @@ Configuration.prototype = {
    *
    * @returns {Language}
    */
-  getDefaultLanguage: function() {
+  getDefaultLanguage: function () {
     return english;
   },
 
@@ -7469,7 +7649,7 @@ Configuration.prototype = {
    *
    * @returns {Cache|exports|module.exports|*}
    */
-  getCache: function() {
+  getCache: function () {
     return this.cacheAdapter;
   },
 
@@ -7481,14 +7661,15 @@ Configuration.prototype = {
    * @param format
    * @returns {*}
    */
-  getDefaultToken: function(token, type, format) {
-    type = type || "data"; format = format || "html";
+  getDefaultToken: function (token, type, format) {
+    type = type || "data";
+    format = format || "html";
 
     if (this.default_tokens[format][type][token])
       return this.default_tokens[format][type][token];
 
     var parts = token.split("_");
-    token = parts[parts.length-1];
+    token = parts[parts.length - 1];
     token = token.replace(/_*\d+$/, '');
 
     if (this.default_tokens[format][type][token])
@@ -7505,8 +7686,9 @@ Configuration.prototype = {
    * @param type
    * @param format
    */
-  setDefaultToken: function(token, value, type, format) {
-    type = type || "data"; format = format || "html";
+  setDefaultToken: function (token, value, type, format) {
+    type = type || "data";
+    format = format || "html";
     this.default_tokens[format] = this.default_tokens[format] || {};
     this.default_tokens[format][type] = this.default_tokens[format][type] || {};
     this.default_tokens[format][type][token] = value;
@@ -7518,7 +7700,7 @@ Configuration.prototype = {
    * @param key
    * @returns {*|{}}
    */
-  getContextRules: function(key) {
+  getContextRules: function (key) {
     return this.context_rules[key] || {};
   },
 
@@ -7530,8 +7712,8 @@ Configuration.prototype = {
    * @param rule
    * @returns {boolean}
    */
-  setContextRules: function(key, variable, rule) {
-    if(!this.context_rules[key]) return false;
+  setContextRules: function (key, variable, rule) {
+    if (!this.context_rules[key]) return false;
     this.context_rules[key].variables[variable] = rule;
   },
 
@@ -7540,7 +7722,7 @@ Configuration.prototype = {
    *
    * @returns {boolean}
    */
-  isDisabled: function() {
+  isDisabled: function () {
     return !this.isEnabled();
   },
 
@@ -7549,7 +7731,7 @@ Configuration.prototype = {
    *
    * @returns {boolean|at.selectors.pseudos.enabled|Function}
    */
-  isEnabled: function() {
+  isEnabled: function () {
     return this.enabled;
   },
 
@@ -7558,7 +7740,7 @@ Configuration.prototype = {
    *
    * @returns {boolean}
    */
-  isFileCache: function() {
+  isFileCache: function () {
     if (this.cache === null) return false;
     return this.cache.adapter == 'file';
   },
@@ -7569,7 +7751,7 @@ Configuration.prototype = {
    * @param key
    * @param klass
    */
-  registerCacheAdapter: function(key, klass) {
+  registerCacheAdapter: function (key, klass) {
     this.cache_adapters = this.cache_adapters || {};
     this.cache_adapters[key] = klass;
   },
@@ -7579,9 +7761,9 @@ Configuration.prototype = {
    *
    * @param adapters
    */
-  registerCacheAdapters: function(adapters) {
+  registerCacheAdapters: function (adapters) {
     var self = this;
-    Object.keys(adapters).forEach(function(key) {
+    Object.keys(adapters).forEach(function (key) {
       self.registerCacheAdapter(key, adapters[key]);
     });
   },
@@ -7604,7 +7786,7 @@ Configuration.prototype = {
    * @param key
    * @param klass
    */
-  registerApiAdapter: function(key, klass) {
+  registerApiAdapter: function (key, klass) {
     this.api_adapters = this.api_adapters || {};
     this.api_adapters[key] = klass;
   },
@@ -7614,9 +7796,9 @@ Configuration.prototype = {
    *
    * @param adapters
    */
-  registerApiAdapters: function(adapters) {
+  registerApiAdapters: function (adapters) {
     var self = this;
-    Object.keys(adapters).forEach(function(key) {
+    Object.keys(adapters).forEach(function (key) {
       self.registerApiAdapter(key, adapters[key][klass]);
     });
   },
@@ -7627,21 +7809,68 @@ Configuration.prototype = {
    * @param key
    * @returns {*}
    */
-  getApiAdapter: function(key) {
+  getApiAdapter: function (key) {
     if (!this.api_adapters)
       return null;
     return this.api_adapters[key];
+  },
+
+  /**
+   * Check if default decoration token
+   *
+   * @param name
+   * @returns {boolean}
+   */
+  isDefaultDecorationToken: function (name) {
+    var keys = Object.keys(this.default_tokens.html.decoration);
+    return (keys.indexOf(name) !== -1);
+  },
+
+  /**
+   * Based on the styles of a given choice element, return back the mapped context key for the language
+   *
+   * @param keys
+   * @returns {*}
+   */
+  getXMessageContextKeyByStyleKeys: function (keys) {
+    var context_keys = utils.keys(this.xmessage.context_rules);
+    var selected_context_key = null;
+
+    var self = this;
+    context_keys.forEach(function(context_key) {
+      var xmessage_keys = utils.values(self.xmessage.context_rules[context_key]);
+      if (utils.containsAny(xmessage_keys, keys)) {
+        selected_context_key = context_key;
+      }
+    });
+
+    return selected_context_key;
+  },
+
+  /**
+   * Returns a mapped xmessage choice key based on the context rule key
+   *
+   * @param context_key
+   * @param rule_key
+   * @returns {*}
+   */
+  getXMessageRuleKeyByContextRuleKey: function (context_key, rule_key) {
+    if (!this.xmessage.context_rules[context_key])
+        return rule_key;
+
+    return this.xmessage.context_rules[context_key][rule_key] || rule_key;
   }
+
 };
 
 module.exports = new Configuration();
 
 
 
-},{"./../config/application.js":13,"./../config/defaults.js":14,"./../config/english.js":15,"./cache":19,"./utils":44}],22:[function(require,module,exports){
+},{"./../config/application.js":13,"./../config/defaults.js":14,"./../config/english.js":15,"./cache":19,"./utils":51}],22:[function(require,module,exports){
 (function (Buffer){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7675,6 +7904,12 @@ var utils = require('../utils');
 
 var HTMLDecorator = {
 
+  /**
+   * Checks if decorations should be applied
+   *
+   * @param options
+   * @returns {*}
+   */
   isEnabled: function(options) {
     if (!options) return false;
     if (options.skip_decorations) return false;
@@ -7686,6 +7921,13 @@ var HTMLDecorator = {
     );
   },
 
+  /**
+   * Returns an element to use for decorations - to avoid style collisions
+   *
+   * @param defaultElement
+   * @param options
+   * @returns {*}
+   */
   getDecorationElement: function(defaultElement, options) {
     if (options.use_span)
       return 'span';
@@ -7696,6 +7938,16 @@ var HTMLDecorator = {
     return defaultElement;
   },
 
+  /**
+   * Decorates an element with classes based on the translation status
+   *
+   * @param translated_label
+   * @param translation_language
+   * @param target_language
+   * @param translation_key
+   * @param options
+   * @returns {*}
+   */
   decorate: function(translated_label, translation_language, target_language, translation_key, options) {
     options = options || {};
     if (!this.isEnabled(options)) return translated_label;
@@ -7735,6 +7987,16 @@ var HTMLDecorator = {
     return html.join("");
   },
 
+  /**
+   * Decorates a language case fragment
+   *
+   * @param language_case
+   * @param rule
+   * @param original
+   * @param transformed
+   * @param options
+   * @returns {*}
+   */
   decorateLanguageCase: function(language_case, rule, original, transformed, options) {
     options = options || {};
     if (!this.isEnabled(options)) return transformed;
@@ -7774,6 +8036,14 @@ var HTMLDecorator = {
     return html.join("");
   },
 
+  /**
+   * Decorates a data token
+   *
+   * @param token
+   * @param value
+   * @param options
+   * @returns {*}
+   */
   decorateToken: function(token, value, options) {
     if (!this.isEnabled(options)) return value;
 
@@ -7796,6 +8066,14 @@ var HTMLDecorator = {
     return html.join("");
   },
 
+  /**
+   * Decorates an element
+   *
+   * @param token
+   * @param value
+   * @param options
+   * @returns {*}
+   */
   decorateElement: function(token, value, options) {
     if (!this.isEnabled(options)) return value;
 
@@ -7817,9 +8095,9 @@ module.exports = HTMLDecorator;
 
 
 }).call(this,require("buffer").Buffer)
-},{"../utils":44,"buffer":8}],23:[function(require,module,exports){
+},{"../utils":51,"buffer":9}],23:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7851,17 +8129,16 @@ module.exports = HTMLDecorator;
 
 var scripts = {
 
+  /**
+   *
+   * @param app
+   * @param options
+   * @returns {string}
+   */
   agent_tag: function (app, options) {
     options = options || {};
 
-    options.cache = options.cache || 864000000;
     var agent_host = options.host || "https://tools.translationexchange.com/agent/stable/agent.min.js";
-
-    if (options.cache) {
-      var t = new Date().getTime();
-      t = t - (t % options.cache);
-      agent_host += "?ts=" + t;
-    }
 
     options.css = options.css || app.css;
     options.sdk = options.sdk || 'tml-js v0.4.16';
@@ -7880,6 +8157,7 @@ var scripts = {
     //console.log(options);
 
     var html = [];
+    html.push("");
     html.push("<script>");
     html.push("(function() {");
     html.push("  var script = document.createElement('script');");
@@ -7892,9 +8170,39 @@ var scripts = {
     html.push("  document.getElementsByTagName('head')[0].appendChild(script);");
     html.push("})();");
     html.push("</script>");
+
+    html.push("<style id='tml-stylesheet'>");
+    if (app.current_locale) {
+      var current_language = app.languages_by_locale[app.current_locale];
+      if (current_language && current_language.configuration && current_language.configuration.css) {
+        html.push("/* Language Stylesheet (" + current_language.configuration.id + "): " + current_language.locale + " */");
+        html.push(current_language.configuration.css);
+        html.push("");
+      }
+    }
+
+    if (app.sources_by_key) {
+      Object.keys(app.sources_by_key).forEach(function(key) {
+        var source = app.sources_by_key[key];
+        if (source && source.configuration && source.configuration.css) {
+          html.push("/* Source Stylesheet (" + source.configuration.id + "): " + source.source + " locale: " + app.current_locale + "*/");
+          html.push(source.configuration.css);
+          html.push("");
+        }
+      });
+    }
+    html.push("</style>");
+    html.push("");
+
     return html.join("\n");
   },
 
+  /**
+   *
+   * @param language
+   * @param options
+   * @returns {string}
+   */
   language_name_tag: function (language, options) {
     options = options || {};
     if (language === null) language = tml_current_language();
@@ -7907,6 +8215,12 @@ var scripts = {
     return html.join('');
   },
 
+  /**
+   *
+   * @param language
+   * @param options
+   * @returns {string}
+   */
   language_flag_tag: function (language, options) {
     options = options || {};
     var name = language.english_name;
@@ -7917,6 +8231,13 @@ var scripts = {
     return "<img src='" + language.flag_url + "' style='margin-right:3px;' alt='" + name + "' title='" + name + "'>";
   },
 
+  /**
+   *
+   * @param app
+   * @param type
+   * @param options
+   * @returns {string}
+   */
   language_selector_tag: function (app, type, options) {
     type = type || 'default';
 
@@ -7940,7 +8261,7 @@ module.exports = {
 };
 },{}],24:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8000,10 +8321,20 @@ var Language = function(attrs) {
 };
 
 Language.prototype = {
+  /**
+   *
+   * @param key
+   * @returns {*}
+   */
   getContextByKeyword: function(key) {
     return this.contexts[key];
   },
-  
+
+  /**
+   *
+   * @param token_name
+   * @returns {*}
+   */
   getContextByTokenName: function(token_name) {
     var keys = utils.keys(this.contexts || {});
     for (var i=0; i<keys.length; i++) {
@@ -8012,15 +8343,32 @@ Language.prototype = {
     }
     return null;
   },
-  
+
+  /**
+   *
+   * @param key
+   * @returns {*}
+   */
   getLanguageCaseByKeyword: function(key) {
     return this.cases[key];
   },
 
+  /**
+   *
+   * @returns {boolean}
+   */
   isDefault: function() {
     return (this.locale == config.default_locale);
   },
 
+  /**
+   *
+   * @param label
+   * @param description
+   * @param tokens
+   * @param options
+   * @returns {*}
+   */
   translate: function(label, description, tokens, options) {
     var params = utils.normalizeParams(label, description, tokens, options);
     if (!params.label)
@@ -8030,11 +8378,13 @@ Language.prototype = {
       return utils.localizeDate(params.label, utils.extend(params.options, {language: self}));
     }
 
+    options = options || {};
     var translation_key = new TranslationKey({
       label:        params.label,
       description:  params.description,
       language:     this.application ? this.application.getLanguage() : null,
-      application:  this.application
+      application:  this.application,
+      syntax:       options.syntax
     });
 
     if (this.application) {
@@ -8068,26 +8418,49 @@ Language.prototype = {
     return translation_key.translate(this, params.tokens, params.options);
   },
 
+  /**
+   *
+   * @param dest
+   * @returns {*}
+   */
   align: function(dest) {
     if (this.isRightToLeft())
       return (dest == 'left' ? 'right' : 'left');
     return dest;
   },
 
+  /**
+   *
+   * @returns {*}
+   */
   isRightToLeft: function() {
     return this.right_to_left;
   },
 
+  /**
+   *
+   * @returns {string}
+   */
   direction: function() {
     return this.isRightToLeft() ? 'rtl' : 'ltr';
   },
 
+  /**
+   *
+   * @param source
+   * @returns {*}
+   */
   getSourceName: function(source) {
     if (!source) return 'index';
     var source_name = source.call && source() || source;
     return source_name;
   },
 
+  /**
+   *
+   * @param options
+   * @returns {*}
+   */
   getSourcePath: function(options) {
 
     if (!options.block_options.length){
@@ -8112,9 +8485,9 @@ Language.prototype = {
 
 module.exports = Language;
 
-},{"./configuration":21,"./language_case":25,"./language_context":27,"./translation_key":42,"./utils":44}],25:[function(require,module,exports){
+},{"./configuration":21,"./language_case":25,"./language_context":27,"./translation_key":49,"./utils":51}],25:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8229,9 +8602,9 @@ LanguageCase.prototype = {
 module.exports = LanguageCase;
 
 
-},{"./configuration":21,"./decorators/html":22,"./language_case_rule":26,"./utils":44}],26:[function(require,module,exports){
+},{"./configuration":21,"./decorators/html":22,"./language_case_rule":26,"./utils":51}],26:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8328,9 +8701,9 @@ LanguageCaseRule.prototype = {
 
 module.exports = LanguageCaseRule;
 
-},{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":44}],27:[function(require,module,exports){
+},{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":51}],27:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8433,10 +8806,10 @@ LanguageContext.prototype = {
   findMatchingRule: function(obj) {
     var token_vars = this.getVars(obj);
 
-    var keys = utils.keys(this.rules);
+    var rule_keys = utils.keys(this.rules);
 
-    for (var i=0; i<keys.length; i++) {
-      var rule = this.rules[keys[i]];
+    for (var i=0; i<rule_keys.length; i++) {
+      var rule = this.rules[rule_keys[i]];
       if (!rule.isFallback() && rule.evaluate(token_vars))
           return rule;
     }
@@ -8447,9 +8820,9 @@ LanguageContext.prototype = {
 };
 
 module.exports = LanguageContext;
-},{"./configuration":21,"./language_context_rule":28,"./utils":44}],28:[function(require,module,exports){
+},{"./configuration":21,"./language_context_rule":28,"./utils":51}],28:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8518,9 +8891,9 @@ LanguageContextRule.prototype = {
 };
 
 module.exports = LanguageContextRule;
-},{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":44}],29:[function(require,module,exports){
+},{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":51}],29:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8584,9 +8957,9 @@ var Logger = {
 };
 
 module.exports = Logger;
-},{"./configuration":21,"./utils":44}],30:[function(require,module,exports){
+},{"./configuration":21,"./utils":51}],30:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8829,7 +9202,7 @@ var MD5 = function (string) {
 module.exports = MD5;
 },{}],31:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8955,6 +9328,14 @@ var Evaluator = function(ctx) {
 
 Evaluator.prototype = {
 
+  /**
+   * Generates a range object
+   *
+   * @param start
+   * @param end
+   * @returns {Array}
+   * @private
+   */
   _range: function(start, end) {
     var 
       range = [],
@@ -8971,6 +9352,13 @@ Evaluator.prototype = {
     return range;
   },
 
+  /**
+   * Converts a string into a regular expression
+   *
+   * @param str
+   * @returns {RegExp}
+   * @private
+   */
   _stringToRegexp: function(str) {
     var re = new RegExp("^\/","g");
     if(!str.match(re)) {
@@ -8985,14 +9373,31 @@ Evaluator.prototype = {
     return new RegExp(str,"g");
   },
 
+  /**
+   * Set variable values for execution
+   *
+   * @param vars
+   */
   setVars: function(vars) {
     this.vars = vars;
   },
 
+  /**
+   * Returns variables
+   *
+   * @returns {{}|*}
+   */
   getVars: function() {
     return this.vars;
   },
 
+  /**
+   * Applies a rule
+   *
+   * @param fn
+   * @param args
+   * @returns {*}
+   */
   apply: function(fn, args) {
     if (typeof this.ctx[fn] == 'function') {
       return this.ctx[fn].apply(this,args);
@@ -9000,6 +9405,12 @@ Evaluator.prototype = {
     return this.ctx[fn];
   },
 
+  /**
+   * Evaluates a rule
+   *
+   * @param expr
+   * @returns {*}
+   */
   evaluate: function(expr) {
     if (this.ctx.atom.call(this, expr)) {
       if (typeof expr == "string" && this.vars[expr]) return this.vars[expr];
@@ -9020,7 +9431,7 @@ module.exports = Evaluator;
 
 },{}],32:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9055,10 +9466,20 @@ var Parser = function(expression) {
 };
 
 Parser.prototype = {
+  /**
+   * Converts a string into an array of tokens
+   *
+   * @param expression
+   */
   tokenize: function(expression) {
 	  this.tokens = expression.match(/[()]|\w+|@\w+|[\+\-\!\|\=>&<\*\/%]+|\".*?\"|'.*?'/g);
   },
 
+  /**
+   * Parses tokens and creates a parse tree
+   *
+   * @returns {*}
+   */
   parse: function() {
   	token = this.tokens.shift();
   	if (!token) return;
@@ -9068,6 +9489,11 @@ Parser.prototype = {
   	return String(token);
   },
 
+  /**
+   * Recursively parses the list of tokens
+   *
+   * @returns {Array}
+   */
   parseList: function() {
   	var list = [];
   	while (this.tokens.length > 0 && this.tokens[0] != ')')
@@ -9080,7 +9506,7 @@ Parser.prototype = {
 module.exports = Parser;
 },{}],33:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9176,10 +9602,10 @@ Source.prototype = {
 };
 
 module.exports = Source;
-},{"./configuration":21,"./translation":41,"./utils":44}],34:[function(require,module,exports){
+},{"./configuration":21,"./translation":48,"./utils":51}],34:[function(require,module,exports){
 
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9241,16 +9667,35 @@ var Tml = {
     config.initCache();
   },
 
+  /**
+   * Translates a string using current language and other options
+   *
+   * @param label
+   * @param description
+   * @param tokens
+   * @param options
+   * @returns {*}
+   */
   translate: function(label, description, tokens, options) {
     var language = this.application.getLanguage(config.current_locale);
     language = language || this.application.getLanguage(config.default_locale);
     return language.translate(label, description, tokens, options);
   },
 
+  /**
+   * Allows to configure internal settings
+   *
+   * @param callback
+   */
   configure: function(callback) {
     callback(config);
   },
 
+  /**
+   * Sets up cache functions
+   *
+   * @param callback
+   */
   cache: function(callback) {
     var data = config.cache.data || {};
     data.languages = data.languages || {};
@@ -9265,9 +9710,9 @@ module.exports = Tml;
 
 
 
-},{"./api_adapters/base":16,"./application":18,"./cache_adapters/base":20,"./configuration":21,"./helpers/scripts":23,"./language":24,"./language_case":25,"./language_case_rule":26,"./language_context":27,"./language_context_rule":28,"./logger":29,"./source":33,"./tokenizers/dom":37,"./translation":41,"./translation_key":42,"./translator":43,"./utils":44}],35:[function(require,module,exports){
+},{"./api_adapters/base":16,"./application":18,"./cache_adapters/base":20,"./configuration":21,"./helpers/scripts":23,"./language":24,"./language_case":25,"./language_case_rule":26,"./language_context":27,"./language_context_rule":28,"./logger":29,"./source":33,"./tokenizers/dom":37,"./translation":48,"./translation_key":49,"./translator":50,"./utils":51}],35:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9297,11 +9742,10 @@ module.exports = Tml;
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-var config          = require('../configuration');
-
 var DataToken       = require("../tokens/data");
 var MethodToken     = require("../tokens/method");
 var PipedToken      = require("../tokens/piped");
+var MapToken      = require("../tokens/map");
 
 var DataTokenizer = function(label) {
   this.label = label;
@@ -9310,6 +9754,9 @@ var DataTokenizer = function(label) {
 
 DataTokenizer.prototype = {
 
+  /**
+   * Extracts tokens from a string
+   */
   tokenize: function() {
     this.tokens = [];
     var tokens = this.getSupportedTokens();
@@ -9325,22 +9772,46 @@ DataTokenizer.prototype = {
     }
   },
 
+  /**
+   * Returns an array of supported token expressions
+   *
+   * %{ test }
+   * {{ test }}
+   * %{{ test }}
+   *
+   */
   getSupportedTokens: function() {
-    //TODO: Add ability to overload the syntax from config
-    //TODO: Add ability to override token syntax in config
+    // TODO: Add ability to override token syntax in config
 
     return [
       [/(%?\{{1,2}\s*\w*\s*(:\s*\w+)*\s*(::\s*\w+)*\s*\}{1,2})/g, DataToken],
       [/(%?\{{1,2}\s*[\w]*\.\w*\s*(:\s*\w+)*\s*(::\s*\w+)*\s*\}{1,2})/g, MethodToken],
-      [/(%?\{{1,2}\s*[\w]*\s*(:\s*\w+)*\s*\|\|?[^\{\}\|]+\}{1,2})/g, PipedToken]
+      [/(%?\{{1,2}\s*[\w]*\s*(:\s*\w+)*\s*\|\|?[^\{\}\|]+\}{1,2})/g, PipedToken],
+      [/(%?\{{1,2}\s*[\w]*\s*(:\s*\w+)*\s*@\s*[^\{\}\|]+\}{1,2})/g, MapToken]
     ];
   },
 
+  /**
+   * Checks if token is allowed in the expression
+   *
+   * @param token
+   * @param options
+   * @returns {boolean}
+   */
   isTokenAllowed: function(token, options) {
     if (!options.allowed_tokens) return true;
     return (options.allowed_tokens.indexOf(token) != -1);
   },
 
+
+  /**
+   * Substitutes the tokens in the label
+   *
+   * @param language
+   * @param context
+   * @param options
+   * @returns {*}
+   */
   substitute: function(language, context, options) {
     options = options || {};
     var label = this.label;
@@ -9353,6 +9824,12 @@ DataTokenizer.prototype = {
     }
     return label;
   },
+
+  /**
+   * Returns metadata as a property
+   *
+   * @returns {*}
+   */
   get metadata() {
     
     var tokenTypes = DataTokenizer.prototype.getSupportedTokens();
@@ -9371,9 +9848,9 @@ DataTokenizer.prototype = {
 };
 
 module.exports = DataTokenizer;
-},{"../configuration":21,"../tokens/data":38,"../tokens/method":39,"../tokens/piped":40}],36:[function(require,module,exports){
+},{"../tokens/data":39,"../tokens/map":41,"../tokens/method":42,"../tokens/piped":43}],36:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9404,7 +9881,7 @@ module.exports = DataTokenizer;
  */
 
 var utils           = require('../utils');
-var config          = require('../configuration');
+var DecorationToken = require("../tokens/decoration");
 
 var RESERVED_TOKEN       = "tml";
 var RE_SHORT_TOKEN_START = "\\[[\\w]*:";                      // [link:
@@ -9418,10 +9895,9 @@ var RE_TEXT              = "[^\\[\\]<>]+";                    // anything that i
 var TOKEN_TYPE_SHORT     = "short";
 var TOKEN_TYPE_LONG      = "long";
 var TOKEN_TYPE_HTML      = "html";
-var PLACEHOLDER          = "{$0}";
 
 var DecorationTokenizer = function(label) {
-  this.label =  "[" + RESERVED_TOKEN + "]" + label + "[/" + RESERVED_TOKEN + "]";
+  this.label = label;
   this.fragments = [];
   this.tokens = [];
   this.tokenize();
@@ -9429,6 +9905,10 @@ var DecorationTokenizer = function(label) {
 
 DecorationTokenizer.prototype = {
 
+  /**
+   *
+   * @returns {Array|{index: number, input: string}|*|Array}
+   */
   tokenize: function() {
     var expression = [
       RE_SHORT_TOKEN_START,
@@ -9440,20 +9920,32 @@ DecorationTokenizer.prototype = {
       RE_TEXT
     ].join("|");
     expression = new RegExp(expression, "g");
-    this.fragments = this.label.match(expression);
+    this.fragments = ("[" + RESERVED_TOKEN + "]" + this.label + "[/" + RESERVED_TOKEN + "]").match(expression);
     return this.fragments;
   },
 
+  /**
+   *
+   * @returns {*}
+   */
   peek: function() {
     if (this.fragments.length === 0) return null;
     return this.fragments[0];
   },
 
+  /**
+   *
+   * @returns {*}
+   */
   getNextFragment: function() {
     if (this.fragments.length === 0) return null;
     return this.fragments.shift();
   },
 
+  /**
+   *
+   * @returns {*}
+   */
   parse: function() {
     var token = this.getNextFragment(), name;
     if (token.match(new RegExp(RE_SHORT_TOKEN_START))) {
@@ -9465,7 +9957,7 @@ DecorationTokenizer.prototype = {
       if (!name) return token;
       return this.parseTree(name, TOKEN_TYPE_LONG);
     } else if (token.match(new RegExp(RE_HTML_TOKEN_START))) {
-      if (token.indexOf("/>") != -1) return token;
+      if (token.indexOf("/>") !== -1) return token;
       name = token.replace(/[<>]/g, '').split(' ')[0];
       if (!name) return token;
       return this.parseTree(name, TOKEN_TYPE_HTML);
@@ -9473,34 +9965,42 @@ DecorationTokenizer.prototype = {
     return token;
   },
 
+  /**
+   *
+   * @param name
+   * @param type
+   *
+   */
   parseTree: function(name, type) {
     var tree = [name];
     var endTag, endMatch;
+
     Object.defineProperty(tree, "tokenType", {
       value: type,
       configurable: true,
       enumerable: false,
       writable: true
     });
-    if (this.tokens.indexOf(name) == -1 && name != RESERVED_TOKEN)
+
+    if (this.tokens.indexOf(name) === -1 && name !== RESERVED_TOKEN)
       this.tokens.push(name);
     
-    if (type == TOKEN_TYPE_SHORT) {
+    if (type === TOKEN_TYPE_SHORT) {
       var first = true;
-      while (this.peek()!==null && !(endMatch = this.peek().match(new RegExp(RE_SHORT_TOKEN_END)))) {
+      while (this.peek()!== null && !(endMatch = this.peek().match(new RegExp(RE_SHORT_TOKEN_END)))) {
         var value = this.parse();
-        if (first && typeof value == "string") {
+        if (first && typeof value === "string") {
           value = value.replace(/^\s+/,'');
           first = false;
         }
         tree.push(value);
       }
-    } else if (type == TOKEN_TYPE_LONG) {
+    } else if (type === TOKEN_TYPE_LONG) {
       endTag = new RegExp("\\[\\/\\s*" + name + "\\s*\\]");
       while (this.peek()!==null && !(endMatch = this.peek().match(endTag))) {
         tree.push(this.parse());
       }
-    } else if (type == TOKEN_TYPE_HTML) {
+    } else if (type === TOKEN_TYPE_HTML) {
       endTag = new RegExp("<\\/\\s*" + name + "\\s*>");
       while (this.peek()!==null && !(endMatch = this.peek().match(endTag))) {
         tree.push(this.parse());
@@ -9520,54 +10020,22 @@ DecorationTokenizer.prototype = {
     return tree;
   },
 
-  isTokenAllowed: function(token) {
-    return (!this.options.allowed_tokens || this.options.allowed_tokens.indexOf(token) != -1);
+  /**
+   *
+   * @param token_name
+   * @param value
+   * @returns {*}
+   */
+  apply: function(token_name, value) {
+    var token = new DecorationToken(token_name, this.label);
+    return token.apply(this.context, value, this.options.allowed_tokens);
   },
 
-  getDefaultDecoration: function(token, value) {
-    var default_decoration = config.getDefaultToken(token, "decoration");
-
-    // need to think a bit more about this
-    if (default_decoration === null) {
-      return "<" + token + ">" + value + "</" + token + ">";
-    }
-
-    var decoration_token_values = this.context[token];
-    default_decoration = default_decoration.replace(PLACEHOLDER, value);
-
-    if (utils.isObject(decoration_token_values)) {
-      var keys = utils.keys(decoration_token_values);
-      for (var i = 0; i < keys.length; i++) {
-        default_decoration = default_decoration.replace("{$" + keys[i] + "}", decoration_token_values[keys[i]]);
-      }
-      default_decoration = default_decoration.replace(/[\w]*=['"]\{\$[^\}]*\}['"]/g, "").replace(/\s*>/, '>').trim();
-    }
-
-    return default_decoration;
-  },
-
-  apply: function(token, value) {
-    if (token == RESERVED_TOKEN) return value;
-    if (!this.isTokenAllowed(token)) return value;
-
-    var method = this.context[token];
-
-    if (!!method) {
-      if (typeof method === 'string')
-        return method.replace(PLACEHOLDER, value);
-
-      if (typeof method === 'function')
-        return method(value);
-
-      if (typeof method === 'object')
-        return this.getDefaultDecoration(token, value);
-
-      return value;
-    }
-
-    return this.getDefaultDecoration(token, value);
-  },
-
+  /**
+   *
+   * @param expr
+   * @returns {*}
+   */
   evaluate: function(expr) {
     if (!(expr instanceof Array)) return expr;
 
@@ -9581,15 +10049,25 @@ DecorationTokenizer.prototype = {
     return this.apply(token, value.join(''));
   },
 
+  /**
+   *
+   * @param tokens
+   * @param options
+   * @returns {*}
+   */
   substitute: function(tokens, options) {
     this.context = tokens || {};
     this.options = options || {};
 
     // fix broken HTML tags
     var result = this.evaluate(this.parse());
-    result = result.replace('[/tml]', '');
+    result = result.replace('[/' + RESERVED_TOKEN + ']', '');
     return result;
   },
+
+  /**
+   * Returns metadata for the tokens
+   */
   metadata: {
     short: {
       start: RE_SHORT_TOKEN_START,
@@ -9606,11 +10084,10 @@ DecorationTokenizer.prototype = {
   }
 };
 
-
 module.exports = DecorationTokenizer;
-},{"../configuration":21,"../utils":44}],37:[function(require,module,exports){
+},{"../tokens/decoration":40,"../utils":51}],37:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9640,10 +10117,10 @@ module.exports = DecorationTokenizer;
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-var utils     = require("../utils");
-var config    = require("../configuration");
+var utils = require("../utils");
+var config = require("../configuration");
 
-var DomTokenizer = function(doc, context, options) {
+var DomTokenizer = function (doc, context, options) {
   this.doc = doc;
   this.context = context || {};
   this.tokens = [];
@@ -9652,29 +10129,38 @@ var DomTokenizer = function(doc, context, options) {
 
 DomTokenizer.prototype = {
 
-  translate: function() {
+  /**
+   *
+   * @returns {*}
+   */
+  translate: function () {
     return this.translateTree(this.doc);
   },
 
-  translateTree: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {*}
+   */
+  translateTree: function (node) {
     if (this.isNonTranslatableNode(node)) {
       //if (node.childNodes.length == 1)
       //  return node.childNodes[0].nodeValue;
       return node.innerHTML;
     }
 
-    if (node.nodeType == 3)
+    if (node.nodeType === 3)
       return this.translateTml(node.nodeValue);
 
     var html = "";
     var buffer = "";
 
-    for(var i=0; i<node.childNodes.length; i++) {
+    for (var i = 0; i < node.childNodes.length; i++) {
       var child = node.childNodes[i];
 
-      //    console.log("Translating: " + child.nodeType + " " + child.nodeName);
+      // console.log("Translating: " + child.nodeType + " " + child.nodeName + " " + child.tagName);
 
-      if (child.nodeType == 3) {
+      if (child.nodeType === 3) {
         buffer = buffer + child.nodeValue;
       } else if (this.isInlineNode(child) && this.hasInlineOrTextSiblings(child) && !this.isBetweenSeparators(child)) {  // inline nodes - tml
         buffer = buffer + this.generateTmlTags(child);
@@ -9705,12 +10191,17 @@ DomTokenizer.prototype = {
     return html;
   },
 
-  isNoTranslate: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isNoTranslate: function (node) {
     if (node.attributes) {
       for (var i = 0; i < node.attributes.length; i++) {
-        if (node.attributes[i].name == 'notranslate')
+        if (node.attributes[i].name === 'notranslate')
           return true;
-        if (node.attributes[i].name == 'class' && node.attributes[i].value.indexOf("notranslate") != -1)
+        if (node.attributes[i].name === 'class' && node.attributes[i].value.indexOf("notranslate") !== -1)
           return true;
       }
     }
@@ -9718,13 +10209,18 @@ DomTokenizer.prototype = {
     return false;
   },
 
-  isNonTranslatableNode: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isNonTranslatableNode: function (node) {
     if (!node) return false;
 
-    if (node.nodeType == 8) return true;
+    if (node.nodeType === 8) return true;
 
-    if (node.nodeType == 1) {
-      if (this.getOption("nodes.scripts").indexOf(node.nodeName.toLowerCase()) != -1)
+    if (node.nodeType === 1) {
+      if (this.getOption("nodes.scripts").indexOf(node.nodeName.toLowerCase()) !== -1)
         return true;
 
       if (node.childNodes.length === 0 && node.nodeValue === '')
@@ -9737,7 +10233,12 @@ DomTokenizer.prototype = {
     return false;
   },
 
-  translateTml: function(tml) {
+  /**
+   *
+   * @param tml
+   * @returns {*}
+   */
+  translateTml: function (tml) {
     if (this.isEmptyString(tml)) return tml;
 
     tml = this.generateDataTokens(tml);
@@ -9748,7 +10249,7 @@ DomTokenizer.prototype = {
       sentences = utils.splitSentences(tml);
       translation = tml;
       var self = this;
-      sentences.forEach(function(sentence) {
+      sentences.forEach(function (sentence) {
         var sentenceTranslation = self.getOption("debug") ? self.debugTranslation(sentence) : current_language.translate(sentence, self.tokens, self.options);
         translation = translation.replace(sentence, sentenceTranslation);
       });
@@ -9758,20 +10259,20 @@ DomTokenizer.prototype = {
 
     tml = tml.replace(/[\n]/g, '').replace(/\s\s+/g, ' ').trim();
 
-    //console.log(tml);
-    //console.log(this.tokens);
+    // console.log(tml);
+    // console.log(this.tokens);
 
     translation = this.getOption("debug") ? this.debugTranslation(tml) : current_language.translate(tml, this.tokens, this.options);
     this.resetContext();
     return translation;
   },
 
-  hasChildNodes: function(node) {
-    if (!node.childNodes) return false;
-    return (node.childNodes.length > 0);
-  },
-
-  isBetweenSeparators: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isBetweenSeparators: function (node) {
     if (this.isSeparatorNode(node.previousSibling) && !this.isValidTextNode(node.nextSibling))
       return true;
 
@@ -9781,7 +10282,12 @@ DomTokenizer.prototype = {
     return false;
   },
 
-  generateTmlTags: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {*}
+   */
+  generateTmlTags: function (node) {
     var buffer = "";
     var self = this;
 
@@ -9791,13 +10297,13 @@ DomTokenizer.prototype = {
     }
 
     var name = node.tagName.toLowerCase();
-    if (name == 'var') {
+    if (name === 'var') {
       return this.registerDataTokenFromVar(node);
     }
 
-    for(var i=0; i<node.childNodes.length; i++) {
+    for (var i = 0; i < node.childNodes.length; i++) {
       var child = node.childNodes[i];
-      if (child.nodeType == 3)                    // text node
+      if (child.nodeType === 3)                    // text node
         buffer = buffer + child.nodeValue;
       else
         buffer = buffer + self.generateTmlTags(child);
@@ -9816,7 +10322,12 @@ DomTokenizer.prototype = {
     return '[' + token + ']' + value + '[/' + token + ']';
   },
 
-  registerDataTokenFromVar: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {string}
+   */
+  registerDataTokenFromVar: function (node) {
     var object = {};
     var tokenName = 'var';
 
@@ -9835,43 +10346,77 @@ DomTokenizer.prototype = {
     return "{" + tokenName + "}";
   },
 
-  getOption: function(name) {
-    if(typeof this.options[name] === 'undefined' || this.options[name] === null) {
+  /**
+   *
+   * @param name
+   * @returns {*}
+   */
+  getOption: function (name) {
+    if (typeof this.options[name] === 'undefined' || this.options[name] === null) {
       return utils.hashValue(config.translator_options, name);
     }
     return this.options[name];
   },
 
-  debugTranslation: function(translation) {
+  /**
+   *
+   * @param translation
+   * @returns {string|*|XML|void}
+   */
+  debugTranslation: function (translation) {
     return this.getOption("debug_format").replace('{$0}', translation);
   },
 
-  isEmptyString: function(tml) {
+  /**
+   *
+   * @param tml
+   * @returns {boolean}
+   */
+  isEmptyString: function (tml) {
     //  console.log("TML Before: [" + tml + "]");
     tml = tml.replace(/[\s\n\r\t\0\x0b\xa0\xc2]/g, '');
     //  console.log("TML After: [" + tml + "]");
     return (tml === '');
   },
 
-  resetContext: function() {
+  /**
+   *
+   */
+  resetContext: function () {
     this.tokens = [].concat(this.context);
   },
 
-  isShortToken: function(token, value) {
-    return (this.getOption("nodes.short").indexOf(token.toLowerCase()) != -1 || value.length < 20);
+  /**
+   *
+   * @param token
+   * @param value
+   * @returns {boolean}
+   */
+  isShortToken: function (token, value) {
+    return (this.getOption("nodes.short").indexOf(token.toLowerCase()) !== -1 || value.length < 20);
   },
 
-  isOnlyChild: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isOnlyChild: function (node) {
     if (!node.parentNode) return false;
-    return (node.parentNode.childNodes.length == 1);
+    return (node.parentNode.childNodes.length === 1);
   },
 
-  hasInlineOrTextSiblings: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  hasInlineOrTextSiblings: function (node) {
     if (!node.parentNode) return false;
 
-    for (var i=0; i < node.parentNode.childNodes.length; i++) {
+    for (var i = 0; i < node.parentNode.childNodes.length; i++) {
       var child = node.parentNode.childNodes[i];
-      if (child != node) {
+      if (child !== node) {
         if (this.isInlineNode(child) || this.isValidTextNode(child))
           return true;
       }
@@ -9880,47 +10425,87 @@ DomTokenizer.prototype = {
     return false;
   },
 
-  isInlineNode: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isInlineNode: function (node) {
     return (
-        node.nodeType == 1 &&
-        this.getOption("nodes.inline").indexOf(node.tagName.toLowerCase()) != -1 &&
-        !this.isOnlyChild(node)
-      );
+      node.nodeType === 1 &&
+      this.getOption("nodes.inline").indexOf(node.tagName.toLowerCase()) !== -1 &&
+      !this.isOnlyChild(node)
+    );
   },
 
-  isContainerNode: function(node) {
-    return (node.nodeType == 1 && !this.isInlineNode(node));
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isContainerNode: function (node) {
+    return (node.nodeType === 1 && !this.isInlineNode(node));
   },
 
-  isSelfClosingNode: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isSelfClosingNode: function (node) {
     return (!node.firstChild);
   },
 
-  isIgnoredNode: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isIgnoredNode: function (node) {
     if (node.nodeType != 1) return true;
     return (this.getOption("nodes.ignored").indexOf(node.tagName.toLowerCase()) != -1);
   },
 
-  isValidTextNode: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isValidTextNode: function (node) {
     if (!node) return false;
     return (node.nodeType == 3 && !this.isEmptyString(node.nodeValue));
   },
 
-  isSeparatorNode: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {boolean}
+   */
+  isSeparatorNode: function (node) {
     if (!node) return false;
-    return (node.nodeType == 1 && this.getOption("nodes.splitters").indexOf(node.tagName.toLowerCase()) != -1);
+    return (node.nodeType === 1 && this.getOption("nodes.splitters").indexOf(node.tagName.toLowerCase()) !== -1);
   },
 
-  sanitizeValue: function(value) {
-    return value.replace(/^\s+/,'');
+  /**
+   *
+   * @param value
+   * @returns {string|*|XML|void}
+   */
+  sanitizeValue: function (value) {
+    return value.replace(/^\s+/, '');
   },
 
-  replaceSpecialCharacters: function(text) {
+  /**
+   *
+   * @param text
+   * @returns {*}
+   */
+  replaceSpecialCharacters: function (text) {
     if (!this.getOption("data_tokens.special.enabled")) return text;
 
     var matches = text.match(this.getOption("data_tokens.special.regex"));
     var self = this;
-    matches.forEach(function(match) {
+    matches.forEach(function (match) {
       token = match.substring(1, match.length - 2);
       self.context[token] = match;
       text = text.replace(match, "{" + token + "}");
@@ -9929,7 +10514,12 @@ DomTokenizer.prototype = {
     return text;
   },
 
-  generateDataTokens: function(text) {
+  /**
+   *
+   * @param text
+   * @returns {*|string|XML|void}
+   */
+  generateDataTokens: function (text) {
     var self = this;
 
     text = this.sanitizeValue(text);
@@ -9939,7 +10529,7 @@ DomTokenizer.prototype = {
     if (this.getOption("data_tokens.date.enabled")) {
       tokenName = self.getOption("data_tokens.date.name");
       var formats = self.getOption("data_tokens.date.formats");
-      formats.forEach(function(format) {
+      formats.forEach(function (format) {
         var regex = format[0];
         var date_format = format[1];
 
@@ -9978,7 +10568,13 @@ DomTokenizer.prototype = {
     return text;
   },
 
-  generateHtmlToken: function(node, value) {
+  /**
+   *
+   * @param node
+   * @param value
+   * @returns {string}
+   */
+  generateHtmlToken: function (node, value) {
     var name = node.tagName.toLowerCase();
     var attributes = node.attributes;
     var attributesHash = {};
@@ -9994,7 +10590,7 @@ DomTokenizer.prototype = {
       return '<' + name + '>' + value + '</' + name + '>';
     }
 
-    for(var i=0; i<attributes.length; i++) {
+    for (var i = 0; i < attributes.length; i++) {
       attributesHash[attributes[i].name] = attributes[i].value;
     }
 
@@ -10002,9 +10598,9 @@ DomTokenizer.prototype = {
     keys.sort();
 
     var attr = [];
-    keys.forEach(function(key) {
+    keys.forEach(function (key) {
       var quote = (attributesHash[key].indexOf("'") != -1 ? '"' : "'");
-      attr.push(key  + '=' + quote + attributesHash[key] + quote);
+      attr.push(key + '=' + quote + attributesHash[key] + quote);
     });
     attr = attr.join(' ');
 
@@ -10014,19 +10610,30 @@ DomTokenizer.prototype = {
     return '<' + name + ' ' + attr + '>' + value + '</' + name + '>';
   },
 
-  adjustName: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {string}
+   */
+  adjustName: function (node) {
     var name = node.tagName.toLowerCase();
     var map = this.getOption("name_mapping");
     name = map[name] ? map[name] : name;
     return name;
   },
 
-  contextualize: function(name, context) {
+  /**
+   *
+   * @param name
+   * @param context
+   * @returns {*}
+   */
+  contextualize: function (name, context) {
     if (this.tokens[name] && this.tokens[name] != context) {
       var index = 0;
       var matches = name.match(/\d+$/);
       if (matches && matches.length > 0) {
-        index = parseInt(matches[matches.length-1]);
+        index = parseInt(matches[matches.length - 1]);
         name = name.replace("" + index, '');
       }
       name = name + (index + 1);
@@ -10037,30 +10644,44 @@ DomTokenizer.prototype = {
     return name;
   },
 
-  debug: function(doc) {
+  /**
+   *
+   * @param doc
+   */
+  debug: function (doc) {
     this.doc = doc;
     this.debugTree(doc, 0);
   },
 
-  debugTree: function(node, depth) {
-    var padding = new Array(depth+1).join('=');
+  /**
+   *
+   * @param node
+   * @param depth
+   */
+  debugTree: function (node, depth) {
+    var padding = new Array(depth + 1).join('=');
 
     console.log(padding + "=> " + (typeof node) + ": " + this.nodeInfo(node));
 
     if (node.childNodes) {
       var self = this;
-      for(var i=0; i<node.childNodes.length; i++) {
+      for (var i = 0; i < node.childNodes.length; i++) {
         var child = node.childNodes[i];
-        self.debugTree(child, depth+1);
+        self.debugTree(child, depth + 1);
       }
     }
   },
 
-  nodeInfo: function(node) {
+  /**
+   *
+   * @param node
+   * @returns {string}
+   */
+  nodeInfo: function (node) {
     var info = [];
     info.push(node.nodeType);
 
-    if (node.nodeType == 1)
+    if (node.nodeType === 1)
       info.push(node.tagName);
 
     if (this.isInlineNode(node)) {
@@ -10077,7 +10698,7 @@ DomTokenizer.prototype = {
     if (this.isOnlyChild(node))
       info.push("only child");
 
-    if (node.nodeType == 3)
+    if (node.nodeType === 3)
       return "[" + info.join(", ") + "]" + ': "' + node.nodeValue + '"';
 
     return "[" + info.join(", ") + "]";
@@ -10086,9 +10707,609 @@ DomTokenizer.prototype = {
 };
 
 module.exports = DomTokenizer;
-},{"../configuration":21,"../utils":44}],38:[function(require,module,exports){
+},{"../configuration":21,"../utils":51}],38:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ * Original author: Georg Puchta, LinkedIn.com
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+var utils = require('../utils');
+var config    = require("../configuration");
+
+var DecorationToken = require("../tokens/xmessage/decoration");
+var DataToken = require("../tokens/xmessage/data");
+var ChoiceToken = require("../tokens/xmessage/choice");
+var MapToken = require("../tokens/xmessage/map");
+
+/**
+ * XMessage tokenizer
+ *
+ * @param label
+ * @constructor
+ */
+var XMessageTokenizer = function (label, options) {
+  this.label = label;
+  this.pos = 0;
+  this.len = label ? label.length : 0;
+  this.last = null;
+  this.options = options || {};
+  this.tokenize();
+};
+
+XMessageTokenizer.prototype = {
+
+  /**
+   * Expression cache
+   */
+  cache: {},
+
+  /**
+   *
+   */
+  optionalStyleFormatTypes: {
+    'text': true,
+    'date': true,
+    'time': true,
+    'number': true,
+    'name': true,
+    'list': true,
+    'possessive': true,
+    'salutation': true
+  },
+
+  /**
+   *
+   */
+  updateLast: function () {
+    this.last = this.pos > 0 ? this.label.charAt(this.pos - 1) : null;
+  },
+
+  /**
+   *
+   * @returns {*}
+   */
+  next: function () {
+    if (this.len === 0 || this.pos >= this.len) {
+      return null;
+    }
+    this.updateLast();
+    return this.label.charAt(this.pos++);
+  },
+
+  /**
+   *
+   * @returns {*}
+   */
+  peek: function () {
+    if (this.len === 0) {
+      return null;
+    }
+    return this.label.charAt(this.pos);
+  },
+
+  /**
+   *
+   */
+  revert: function () {
+    if (this.pos > 0) {
+      this.pos--;
+      this.updateLast();
+    }
+  },
+
+  /**
+   *
+   * @returns {null|*|boolean}
+   */
+  isEscaped: function () {
+    return this.last && this.last == '\\';
+  },
+
+  /**
+   *
+   * @param result
+   * @param c
+   * @param argumentIndex
+   * @param formatType
+   */
+  noFormatStyle: function (result, c, argumentIndex, formatType) {
+    throw "no format style allowed for format type '" + formatType + "'";
+  },
+
+  /**
+   *
+   * @param result
+   * @param c
+   * @param argumentIndex
+   * @param formatType
+   */
+  collectionFormatStyle: function (result, c, argumentIndex, formatType) {
+    // register the format element
+    var styles = [];
+    var subtype = 'text'; // default
+
+    if (c == ',') {
+      // we have a sub-type
+      subtype = '';
+      c = this.next();
+      while (c && ',}'.indexOf(c) == -1) {
+        subtype += c;
+        c = this.next();
+        if (c == null) {
+          throw "expected ',' or '}', but found end of string";
+        }
+      }
+    }
+
+    result.push({index: argumentIndex, type: formatType, subtype: subtype, styles: styles});
+
+    if (c == '}') {
+      return;
+    }
+
+    // parse format style
+    while (c) {
+      c = this.next();
+      if (c == null) {
+        throw "expected '}', '|' or format style value, but found end of string";
+      }
+
+      if (c == '}' && !this.isEscaped()) {
+        return;
+      }
+      else if (c == '|') {
+        continue;
+      }
+
+      var styleKey = '';
+      while (c && '#<|}'.indexOf(c) == -1) {
+        styleKey += c;
+        c = this.next();
+        if (c == null) {
+          throw "expected '#', '<' or '|', but found end of string";
+        }
+      }
+      if (c == '<')
+        styleKey += c;
+
+      var items = [];
+      styles.push({key: styleKey, items: items});
+
+      if ('#<'.indexOf(c) > -1) {
+        this.traverseText(items);
+      }
+      else if ('|}'.indexOf(c) > -1) {
+        // we found a key without value e.g. {0,param,possessive} and {0,param,prefix#.|possessive}
+        this.revert();
+      }
+    }
+  },
+
+  /**
+   *
+   * @param result
+   * @param c
+   * @param argumentIndex
+   * @param formatType
+   */
+  textFormatStyle: function (result, c, argumentIndex, formatType) {
+    // parse format style
+    var buffer = '';
+    c = this.next();
+    if (c == null) {
+      throw "expected format style or '}', but found end of string";
+    }
+    while (c) {
+      if (c == '}') {
+        result.push({index: argumentIndex, type: formatType, value: buffer});
+        return;
+      }
+
+      // keep adding to buffer
+      buffer += c;
+      c = this.next();
+      if (c == null) {
+        throw "expected '}', but found end of string";
+      }
+    }
+  },
+
+  /**
+   *
+   * @param result
+   * @param c
+   * @param argumentIndex
+   * @param formatType
+   */
+  defaultFormatStyle: function (result, c, argumentIndex, formatType) {
+    // register the format element
+    var styles = [];
+    result.push({index: argumentIndex, type: formatType, styles: styles});
+    // parse format style
+    while (c) {
+      c = this.next();
+      if (c == null) {
+        throw "expected '}', '|' or format style value, but found end of string";
+      }
+
+      if (c == '}' && !this.isEscaped()) {
+        return;
+      }
+      else if (c == '|') {
+        continue;
+      }
+
+      var styleKey = '';
+      while (c && '#<+|}'.indexOf(c) == -1) {
+        styleKey += c;
+        c = this.next();
+        if (c == null) {
+          throw "expected '#', '<', '+' or '|', but found end of string";
+        }
+      }
+      if (c == '<' || c == '+')
+        styleKey += c;
+
+      var items = [];
+      styles.push({key: styleKey, items: items});
+
+      if ('#<+'.indexOf(c) > -1) {
+        this.traverseText(items);
+      }
+      else if ('|}'.indexOf(c) > -1) {
+        // we found a key without value e.g. {0,param,possessive} and {0,param,prefix#.|possessive}
+        this.revert();
+      }
+    }
+  },
+
+  /**
+   *
+   * @param result
+   */
+  traverseFormatElement: function (result) {
+    var argumentIndex = -1;
+    var formatType = null;
+    var formatStyle = null;
+    var c = this.next();
+
+    if (c == null) {
+      throw "expected place holder index, but found end of string";
+    }
+
+    if (/[\d:]/.test(c)) {
+      // process argument index
+      var isKeyword = c == ':';
+      var index = '';
+      while (c && ',}'.indexOf(c) == -1) {
+        index += c;
+        c = this.next();
+        if (c == null) {
+          throw "expected ',' or '}', but found end of string";
+        }
+      }
+      if (!isKeyword && !/\d+/.test(index))
+        throw "argument index must be numeric: " + index;
+
+      argumentIndex = isKeyword ? index : index * 1;
+    }
+
+    if (c != '}') {
+      // process format type
+      formatType = '';
+      c = this.next();
+      if (c == null) {
+        throw "expected format type, but found end of string";
+      }
+      while (c && ',}'.indexOf(c) == -1 && !this.isEscaped()) {
+        formatType += c;
+        c = this.next();
+        if (c == null) {
+          throw "expected ',' or '}', but found end of string";
+        }
+      }
+    }
+
+    if (c == '}' && !this.isEscaped()) {
+      if (formatType && this.optionalStyleFormatTypes[formatType]) {
+        // we found {0,number} or {0,possessive} or {0,salutation}, which are valid expressions
+        result.push({type: formatType, index: argumentIndex});
+      }
+      else {
+        if (formatType) {
+          // we found something like {0,<type>}, which is
+          // invalid.
+          throw "expected format style for format type '" + formatType + "'";
+        }
+
+        // push param format element
+        result.push({type: 'param', index: argumentIndex});
+      }
+    }
+    else if (c == ',') {
+      var processors = {
+        list: this.collectionFormatStyle,
+        date: this.textFormatStyle,
+        time: this.textFormatStyle,
+        number: this.textFormatStyle,
+        suffix: this.textFormatStyle,
+        possessive: this.noFormatStyle,
+        salutation: this.noFormatStyle,
+        default: this.defaultFormatStyle
+      };
+      var processor = (processors[formatType] || processors.default).bind(this);
+      processor(result, c, argumentIndex, formatType);
+    }
+    else {
+      throw "expected ',' or '}', but found '" + c + "' at position " + this.pos();
+    }
+  },
+
+  /**
+   *
+   * @param result
+   * @returns {*}
+   */
+  traverseText: function (result) {
+    var inQuotedString = false;
+    var buffer = "";
+    var c = this.next();
+    while (c) {
+      if (c == "'") {
+        inQuotedString = !inQuotedString;
+      }
+      if (!inQuotedString && c == '{' && !this.isEscaped()) {
+        if (buffer.length > 0) {
+          result.push({type: 'trans', value: buffer});
+          buffer = "";
+        }
+        this.traverseFormatElement(result);
+      }
+      else if (!inQuotedString && (c == '|' || c == '}') && !this.isEscaped()) {
+        this.revert();
+        break;
+      }
+      else {
+        buffer += c;
+      }
+      c = this.next();
+    }
+    if (buffer.length > 0) {
+      result.push({type: 'trans', value: buffer});
+      buffer = "";
+    }
+    return result;
+  },
+
+  /**
+   *
+   */
+  tokenize: function () {
+    var result = [];
+    try {
+      this.traverseText(result);
+      this.tree = result;
+    } catch (ex) {
+      console.log("Failed to parse the expression: " + this.label);
+      this.tree = null;
+    }
+  },
+
+  /**
+   * Finds the right rule that matches the token object based on the selected context key
+   *
+   * @param language
+   * @param context_key
+   * @param token_object
+   * @returns {*}
+   */
+  choice: function (language, token, token_object) {
+    if (!token || token.context_keys.length === 0)
+      return null;
+
+    var context_key = token.context_keys[0];
+    var context = language.getContextByKeyword(context_key);
+
+    if (context) {
+      var rule = context.findMatchingRule(token_object);
+      if (rule) {
+        return config.getXMessageRuleKeyByContextRuleKey(context_key, rule.keyword);
+      }
+    }
+
+    return null;
+  },
+
+  /**
+   * Compiles the expression and returns translated string
+   *
+   * @param language
+   * @param exp
+   * @param buffer
+   * @param params
+   * @returns {*}
+   */
+  compile: function (language, exp, buffer, params) {
+    var self = this;
+    var style = null;
+    exp.forEach(function (el) {
+      var token = self.getTokenByType(el.type, el);
+      var token_object = self.getTokenObject(params, token);
+      var token_value = self.getTokenDisplayValue(params, token, language);
+
+      // console.log(self.label);
+      // console.log(token, token_object, token_value);
+
+      if (el.styles) {
+        if (self.isChoiceToken(el.type)) {
+          var key = self.choice(language, token, token_object);
+          style = el.styles.find(function (style) {
+            return (style.key === key);
+          });
+          if (style) {
+            self.compile(language, style.items, buffer, params);
+          }
+        } else if (self.isMapToken(el.type)) {
+          style = el.styles.find(function (style) {
+            return (style.key === token_value);
+          });
+          self.compile(language, style.items, buffer, params);
+        } else if (self.isDecorationToken(el.type)) {
+          buffer.push(token.getOpenTag(token_object));
+          self.compile(language, el.styles[0].items, buffer, params);
+          buffer.push(token.getCloseTag());
+        } else {
+          self.compile(language, el.styles[0].items, buffer, params);
+        }
+      } else if (self.isDataToken(el.type)) {
+        buffer.push(token_value);
+      } else {
+        buffer.push(el.value);
+      }
+    });
+    return buffer;
+  },
+
+  /**
+   * Checks if the token is a decoration
+   *
+   * @param type
+   * @returns {*}
+   */
+  isDecorationToken: function(type) {
+    if (!type) return false;
+    return (config.xmessage.decoration_tokens.indexOf(type) !== -1 || config.isDefaultDecorationToken(type));
+  },
+
+  /**
+   * Checks if the token is a data token
+   *
+   * @param type
+   * @returns {boolean}
+   */
+  isDataToken: function(type) {
+    if (!type) return false;
+    return (config.xmessage.data_tokens.indexOf(type) !== -1);
+  },
+
+  /**
+   * Checks if the token is a choice token
+   *
+   * @param type
+   * @returns {boolean}
+   */
+  isChoiceToken: function(type) {
+    if (!type) return false;
+    return (config.xmessage.choice_tokens.indexOf(type) !== -1);
+  },
+
+  /**
+   * Checks if the token is a map token
+   *
+   * @param type
+   * @returns {boolean}
+   */
+  isMapToken: function(type) {
+    if (!type) return false;
+    return (config.xmessage.map_tokens.indexOf(type) !== -1);
+  },
+
+  /**
+   * Returns a token object by type
+   *
+   * @param type
+   * @param data
+   * @returns {*}
+   */
+  getTokenByType: function(type, data) {
+    if (this.isDecorationToken(type))
+      return new DecorationToken(this.label, data);
+
+    if (this.isDataToken(type))
+      return new DataToken(this.label, data);
+
+    if (this.isChoiceToken(type))
+      return new ChoiceToken(this.label, data);
+
+    if (this.isMapToken(type))
+      return new MapToken(this.label, data);
+
+    return null;
+  },
+
+  /**
+   * Get token display value
+   *
+   * @param params
+   * @param key
+   * @returns {*}
+   */
+  getTokenDisplayValue: function (token_values, token, language) {
+    if (!token)
+      return null;
+    return token.getTokenValue(token_values, language);
+  },
+
+  /**
+   * Get token object for evaluation (not view)
+   *
+   * @param token_values
+   * @param token
+   * @returns {*}
+   */
+  getTokenObject: function (token_values, token) {
+    if (!token) return null;
+    return token.getTokenObject(token_values);
+  },
+
+  /**
+   *
+   * @param language
+   * @param tokens
+   * @param options
+   * @returns {*}
+   */
+  substitute: function (language, tokens, options) {
+    if (!this.tree) return this.label;
+    return this
+      .compile(language, this.tree, [], tokens)
+      .join('');
+  }
+
+};
+
+module.exports = XMessageTokenizer;
+},{"../configuration":21,"../tokens/xmessage/choice":44,"../tokens/xmessage/data":45,"../tokens/xmessage/decoration":46,"../tokens/xmessage/map":47,"../utils":51}],39:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10168,6 +11389,9 @@ DataToken.prototype = {
   /**
    * getContextForLanguage
    *
+   * { bla:number || one, other }
+   * { count || one, other }
+   *
    * @param language
    * @returns {*}
    */
@@ -10176,25 +11400,6 @@ DataToken.prototype = {
       return language.getContextByKeyword(this.context_keys[0]);
   
     return language.getContextByTokenName(this.short_name);
-  },
-
-  /**
-   * tokenObject
-   *
-   * @param tokens
-   * @param name
-   * @returns {*}
-   */
-  getTokenObject: function(tokens, name) {
-    if (!tokens) return null;
-
-    name = name || this.short_name;
-
-    var object = tokens[name];
-    if (utils.isArray(object))
-      return object[0];
-  
-    return object && object.object || object;
   },
 
   /**
@@ -10219,8 +11424,11 @@ DataToken.prototype = {
    * tr("Hello {user}", {user: [{name: "Michael", gender: "male"}, "Michael"]}}
    * tr("Hello {user}", {user: [{name: "Michael", gender: "male"}, function(text) { return tr(text); }]}}
    *
+   * @param arr
+   * @param language
+   * @param options
+   * @returns {*}
    */
-  
   getTokenValueFromArrayParam: function(arr, language, options) {
     options = options || {};
     if (arr.length === 0)
@@ -10254,8 +11462,12 @@ DataToken.prototype = {
    * tr("Hello {user}", {user: {object: {name: "Michael", gender: "male"}, attribute: "name"}}}
    * tr("Hello {user}", {user: {object: {name: "Michael", gender: "male"}, method: ()}}}
    *
+   *
+   * @param hash
+   * @param language
+   * @param options
+   * @returns {*}
    */
-  
   getTokenValueFromHashParam: function(hash, language, options) {
     options = options || {};
     var value = hash.value || hash.name || hash.first_name || hash.username;
@@ -10279,8 +11491,8 @@ DataToken.prototype = {
     return this.sanitize(object[attr], object, language, utils.extend(options, {safe: false}));
   },
   
-  
   /**
+   *
    * getTokenValueFromArray
    *
    * @description
@@ -10297,15 +11509,15 @@ DataToken.prototype = {
    * tr("{users} joined the site", {users: [[user1, user2, user3], {attribute: "name"})
    * tr("{users} joined the site", {users: [[user1, user2, user3], {attribute: "name", value: "<strong>{$0}</strong>"})
    * tr("{users} joined the site", {users: [[user1, user2, user3], "<strong>{$0}</strong>")
-
-   var user_func = function(user) {}
-
-   tokens = {users: [someArr]}
-
-   <p tml-tr users="someArr" users-format='{attribute: "name"}' users-options=''>
-      {users} joined the site
-   </p>
-
+   *
+   * var user_func = function(user) {}
+   *
+   * tokens = {users: [someArr]}
+   *
+   * <p tml-tr users="someArr" users-format='{attribute: "name"}' users-options=''>
+   *    {users} joined the site
+   * </p>
+   *
    * tr("{count || message}", {user: [1234, function(value) { return tml_localize(value); }]})
    *
    * tr("{users} joined the site", {users: [[user1, user2, user3], "@name", {
@@ -10317,8 +11529,11 @@ DataToken.prototype = {
    *   collapsable: true
    * })
    *
+   * @param params
+   * @param language
+   * @param options
+   * @returns {*}
    */
-  
   getTokenValueFromArray: function(params, language, options) {
     var list_options = {
       description: "List joiner",
@@ -10450,17 +11665,53 @@ DataToken.prototype = {
     result = result + "</span>";
     return result;
   },
-  
+
+  /**
+   * Returns token object for context rules
+   *
+   * @param tokens
+   * @param name
+   * @returns {*}
+   */
+  getTokenObject: function(tokens, name) {
+    if (!tokens) return null;
+
+    name = name || this.short_name;
+
+    if (name && utils.isString(name))
+      name = name.replace(/:/, '');
+
+    var object = tokens[name];
+    if (utils.isArray(object))
+      return object[0];
+
+    return object && object.object || object;
+  },
+
+  /**
+   * Returns token display value
+   *
+   * @param tokens
+   * @param language
+   * @param options
+   * @returns {*}
+   */
   getTokenValue: function(tokens, language, options) {
     tokens = tokens || {};
     options = options || {};
 
-    var hasToken = (this.short_name in tokens);
+    var token_name = this.short_name;
 
-    var object = hasToken ? tokens[this.short_name] : config.getDefaultToken(this.short_name);
-    if (typeof object === 'undefined' || object === null) return this.error("Missing token value");
+    if (token_name && utils.isString(token_name))
+      token_name = token_name.replace(/:/, '');
 
-    if (typeof object == "string")
+    var hasToken = (token_name in tokens);
+    var object = hasToken ? tokens[token_name] : config.getDefaultToken(token_name);
+
+    if (utils.isUndefinedOrNull(object))
+      return this.error("Missing token value");
+
+    if (utils.isString(object))
       return this.sanitize(object.toString(), object, language, utils.extend(options, {safe: true}));
 
     if (utils.isArray(object))
@@ -10471,13 +11722,32 @@ DataToken.prototype = {
 
     return this.sanitize(object.toString(), object, language, utils.extend(options, {safe: false}));
   },
-  
+
+  /**
+   * Applies language use case
+   *
+   * @param key
+   * @param value
+   * @param object
+   * @param language
+   * @param options
+   * @returns {*}
+   */
   applyCase: function(key, value, object, language, options) {
     var lcase = language.getLanguageCaseByKeyword(key);
     if (!lcase) return value;
     return lcase.apply(value, object, options);
   },
-  
+
+  /**
+   * Cleans up token value, if needed
+   *
+   * @param value
+   * @param object
+   * @param language
+   * @param options
+   * @returns {string|*}
+   */
   sanitize: function(value, object, language, options) {
     options = options || {};
     value = "" + value;
@@ -10492,11 +11762,23 @@ DataToken.prototype = {
   
     return value;
   },
-  
+
+  /**
+   *
+   * @param label
+   * @param tokens
+   * @param language
+   * @param options
+   * @returns {string|*|XML|void}
+   */
   substitute: function(label, tokens, language, options) {
     return label.replace(this.full_name, decorator.decorateToken(this, this.getTokenValue(tokens, language, options), options));
   },
 
+  /**
+   *
+   * @returns {string}
+   */
   getDecorationName: function() {
     return 'data';
   }
@@ -10504,9 +11786,273 @@ DataToken.prototype = {
 };
 
 module.exports = DataToken;
-},{"../configuration":21,"../decorators/html":22,"../logger":29,"../utils":44}],39:[function(require,module,exports){
+},{"../configuration":21,"../decorators/html":22,"../logger":29,"../utils":51}],40:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+var utils = require('../utils');
+var logger = require('../logger');
+var config = require('../configuration');
+
+var RESERVED_TOKEN = "tml";
+var TOKEN_PLACEHOLDER = "{$0}";
+
+/**
+ * Tokens.Decoration
+ *
+ * @description
+ * Decoration token
+ *
+ * @constructor
+ * @param name
+ * @param label
+ */
+
+function DecorationToken(name, label) {
+  if (!name) return;
+  this.label = label;
+  this.full_name = name;
+  this.short_name = this.full_name;
+
+  // removing the numbers at the end - default tokens don't need them
+  this.default_name = this.short_name.replace(/(\d)*$/, '');
+}
+
+DecorationToken.prototype = {
+
+  /**
+   * Check if token is allowed in the label
+   *
+   * @param token_name
+   * @param allowed_tokens
+   * @returns {boolean}
+   */
+  isTokenAllowed: function (token_name, allowed_tokens) {
+    return (!allowed_tokens || allowed_tokens.indexOf(token_name) !== -1);
+  },
+
+  /**
+   * Get default decoration
+   *
+   * @param token_content
+   * @param decoration_token_values
+   * @returns {*}
+   */
+  getDefaultDecoration: function (token_content, decoration_token_values) {
+    var default_decoration = config.getDefaultToken(this.default_name, "decoration");
+
+    // need to think a bit more about this
+    if (default_decoration === null) {
+      return "<" + this.short_name + ">" + token_content + "</" + this.short_name + ">";
+    }
+
+    default_decoration = default_decoration.replace(TOKEN_PLACEHOLDER, token_content);
+
+    if (utils.isObject(decoration_token_values)) {
+      var keys = utils.keys(decoration_token_values);
+      keys.forEach(function (key) {
+        default_decoration = default_decoration.replace("{$" + key + "}", decoration_token_values[key]);
+      });
+    } else if (utils.isArray(decoration_token_values)) {
+      var index = 1;
+      decoration_token_values.forEach(function (value) {
+        default_decoration = default_decoration.replace("{$" + (index++) + "}", value);
+      });
+    }
+
+    default_decoration = default_decoration.replace(/[\w]*=['"]\{\$[^\}]*\}['"]/g, "").replace(/\s*>/, '>').trim();
+    return default_decoration;
+  },
+
+  /**
+   * Apply decoration token
+   *
+   * @param token_values
+   * @param token_content
+   * @param allowed_tokens
+   * @returns {*}
+   */
+  apply: function (token_values, token_content, allowed_tokens) {
+    if (this.short_name === RESERVED_TOKEN) return token_content;
+    if (!this.isTokenAllowed(this.short_name, allowed_tokens)) return token_content;
+
+    var method = token_values[this.short_name];
+
+    if (!!method) {
+      if (typeof method === 'string')
+        return method.replace(TOKEN_PLACEHOLDER, token_content);
+
+      if (typeof method === 'function')
+        return method(token_content);
+
+      if (utils.isArray(method) || utils.isObject(method))
+        return this.getDefaultDecoration(token_content, method);
+
+      return token_content;
+    }
+
+    return this.getDefaultDecoration(token_content);
+  },
+
+  getTokenObject: function(token_values, name) {
+    token_values = token_values || {};
+
+    name = name || this.short_name;
+
+    if (name && utils.isString(name))
+      name = name.replace(/:/, '');
+
+    return token_values[name];
+  },
+
+  getTokenValue: function(token_values, language, options) {
+    return this.getTokenObject(token_values, this.short_name);
+  }
+
+};
+
+module.exports = DecorationToken;
+},{"../configuration":21,"../logger":29,"../utils":51}],41:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+var utils           = require('../utils');
+var decorator       = require('../decorators/html');
+
+var DataToken       = require('./data');
+
+function MapToken(name, label) {
+  if (!name) return;
+  this.full_name = name;
+  this.label = label;
+  this.params = [];
+  this.context_keys = [];
+  this.case_keys = [];
+  this.parseElements();
+}
+
+MapToken.prototype = new DataToken();
+MapToken.prototype.constructor = MapToken;
+
+/**
+ * Parses map configuration
+ */
+MapToken.prototype.parseElements = function() {
+  var name_without_parens = this.full_name.replace(/[%\{\}]/g, "").trim();
+  var parts = name_without_parens.split('@');
+  this.short_name = parts[0].trim();
+
+  var self = this;
+  var params_parts = parts[1].trim();
+  if (params_parts === '')
+    return;
+
+  params_parts.split(',').forEach(function(param) {
+    self.params.push(param.trim());
+  });
+
+  if (this.params[0].indexOf(':') !== -1) {
+    var hash = {};
+    this.params.forEach(function(param) {
+      parts = param.split(':');
+      hash[parts[0].trim()] = parts[1].trim();
+    });
+    this.params = hash;
+  }
+};
+
+/**
+ *
+ * @param label
+ * @param tokens
+ * @param language
+ * @param options
+ * @returns {string|*|XML|void}
+ */
+MapToken.prototype.substitute = function(label, tokens, language, options) {
+  var object = this.getTokenObject(tokens);
+
+  if (typeof(object) === 'undefined' || object === null) {
+    this.error("Missing value for a token " + this.full_name);
+    return label;
+  }
+
+  if (this.params.length === 0) {
+    this.error("Params may not be empty for token " + this.full_name);
+    return label;
+  }
+
+  var object_value = this.params[object];
+  var decorated_token = decorator.decorateToken(this, object_value, options);
+  return label.replace(this.full_name, decorated_token, options);
+};
+
+MapToken.prototype.getDecorationName = function() {
+  return 'map';
+};
+
+module.exports = MapToken;
+
+
+},{"../decorators/html":22,"../utils":51,"./data":39}],42:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10552,12 +12098,22 @@ function MethodToken(name, label) {
 MethodToken.prototype = new DataToken();
 MethodToken.prototype.constructor = MethodToken;
 
+/**
+ *
+ */
 MethodToken.prototype.initObject = function() {
   var parts = this.short_name.split('.');
   this.short_name = parts[0];
   this.object_method = parts[1];
 };
 
+/**
+ *
+ * @param tokens
+ * @param language
+ * @param options
+ * @returns {*}
+ */
 MethodToken.prototype.getTokenValue = function(tokens, language, options) {
   tokens = tokens || {};
 
@@ -10575,7 +12131,16 @@ MethodToken.prototype.getTokenValue = function(tokens, language, options) {
   return value;
 };
 
+/**
+ *
+ * @param label
+ * @param tokens
+ * @param language
+ * @param options
+ * @returns {string|*|XML|void}
+ */
 MethodToken.prototype.substitute = function(label, tokens, language, options) {
+  options = options || {};
   return label.replace(this.full_name,
     decorator.decorateToken(this, this.sanitize(
         this.getTokenValue(tokens),
@@ -10595,9 +12160,9 @@ MethodToken.prototype.getDecorationName = function() {
 module.exports = MethodToken;
 
 
-},{"../decorators/html":22,"../utils":44,"./data":38}],40:[function(require,module,exports){
+},{"../decorators/html":22,"../utils":51,"./data":39}],43:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10709,11 +12274,11 @@ PipedToken.prototype.isValueDisplayedInTranslation = function() {
 * token:      {count|| one: message, many: messages}
 * results in: {"one": "message", "many": "messages"}
 *
-* token:      {count|| message}
+* token:      {count|| message, messages}
 * transform:  [{"one": "{$0}", "other": "{$0::plural}"}, {"one": "{$0}", "other": "{$1}"}]
 * results in: {"one": "message", "other": "messages"}
 *
-* token:      {count|| message, messages}
+* token:      {count|| message}
 * transform:  [{"one": "{$0}", "other": "{$0::plural}"}, {"one": "{$0}", "other": "{$1}"}]
 * results in: {"one": "message", "other": "messages"}
 *
@@ -10861,9 +12426,261 @@ PipedToken.prototype.getDecorationName = function() {
 module.exports = PipedToken;
 
 
-},{"../decorators/html":22,"../utils":44,"./data":38}],41:[function(require,module,exports){
+},{"../decorators/html":22,"../utils":51,"./data":39}],44:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+var utils = require('../../utils');
+var logger = require('../../logger');
+var BaseToken = require('../data');
+
+// {0} tagged himself/herself in {1,choice,singular#{1,number} {2,map,photo#photo|video#video}|plural#{1,number} {2,map,photo#photos|video#videos}}.
+
+function ChoiceToken(label, opts) {
+  this.label = label;
+  this.short_name = opts.index;
+  this.full_name = "{" + this.short_name + "}";
+  this.rule_keys = [];
+  var self = this;
+
+  opts.styles.forEach(function (style) {
+    self.rule_keys.push(style.key);
+  });
+
+  this.case_keys = [];
+  this.context_keys = [];
+
+  if (utils.containsAny(this.rule_keys, ['singular', 'plural'])) {
+    this.context_keys.push('number');
+  } else if (utils.containsAny(this.rule_keys, ['female', 'male'])) {
+    this.context_keys.push('gender');
+  } else if (utils.containsAny(this.rule_keys, ['future', 'past', 'present'])) {
+    this.context_keys.push('date');
+  } else {
+    // unknown
+  }
+}
+
+ChoiceToken.prototype = new BaseToken();
+ChoiceToken.prototype.constructor = BaseToken;
+
+module.exports = ChoiceToken;
+},{"../../logger":29,"../../utils":51,"../data":39}],45:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+var BaseToken = require('../data');
+
+// {0} tagged himself/herself in {1,choice,singular#{1,number} {2,map,photo#photo|video#video}|plural#{1,number} {2,map,photo#photos|video#videos}}.
+
+function DataToken(label, opts) {
+  this.label = label;
+  this.short_name = opts.index;
+  this.full_name = "{" + this.short_name + "}";
+  this.case_keys = [];
+  this.context_keys = [];
+}
+
+DataToken.prototype = new BaseToken();
+DataToken.prototype.constructor = BaseToken;
+
+module.exports = DataToken;
+},{"../data":39}],46:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+var utils = require('../../utils');
+var logger = require('../../logger');
+var BaseToken = require('../decoration');
+
+var DEFAULT_DECORATION_PLACEHOLDER = '{!yield!}';
+
+// {0} tagged himself/herself in {1,choice,singular#{1,number} {2,map,photo#photo|video#video}|plural#{1,number} {2,map,photo#photos|video#videos}}.
+
+function DecorationToken(label, opts) {
+  this.label = label;
+  this.type = opts.type;
+  this.short_name = opts.index;
+  this.default_name = opts.type;
+  this.full_name = "{" + opts.index + "}";
+  this.case_keys = [];
+  this.context_keys = [];
+  this.template = null;
+}
+
+DecorationToken.prototype = new BaseToken();
+DecorationToken.prototype.constructor = BaseToken;
+
+DecorationToken.prototype.getTemplate = function(method) {
+  if (method) {
+    if (utils.isString(method)) {
+      // backwards compatibility to legacy code
+      if (this.type === 'anchor')
+        return "<a href='" + method + "'>" + DEFAULT_DECORATION_PLACEHOLDER + "</a>";
+      return method;
+    }
+
+    if (utils.isArray(method) || utils.isObject(method))
+      return this.getDefaultDecoration(DEFAULT_DECORATION_PLACEHOLDER, method);
+
+    return DEFAULT_DECORATION_PLACEHOLDER;
+  }
+
+  return this.getDefaultDecoration(DEFAULT_DECORATION_PLACEHOLDER);
+};
+
+DecorationToken.prototype.getOpenTag = function(method) {
+  this.template = this.getTemplate(method);
+  return this.template.split(DEFAULT_DECORATION_PLACEHOLDER)[0];
+};
+
+DecorationToken.prototype.getCloseTag = function() {
+  var parts = this.template.split(DEFAULT_DECORATION_PLACEHOLDER);
+  return parts[parts.length - 1];
+};
+
+module.exports = DecorationToken;
+},{"../../logger":29,"../../utils":51,"../decoration":40}],47:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
+ *
+ *  _______                  _       _   _             ______          _
+ * |__   __|                | |     | | (_)           |  ____|        | |
+ *    | |_ __ __ _ _ __  ___| | __ _| |_ _  ___  _ __ | |__  __  _____| |__   __ _ _ __   __ _  ___
+ *    | | '__/ _` | '_ \/ __| |/ _` | __| |/ _ \| '_ \|  __| \ \/ / __| '_ \ / _` | '_ \ / _` |/ _ \
+ *    | | | | (_| | | | \__ \ | (_| | |_| | (_) | | | | |____ >  < (__| | | | (_| | | | | (_| |  __/
+ *    |_|_|  \__,_|_| |_|___/_|\__,_|\__|_|\___/|_| |_|______/_/\_\___|_| |_|\__,_|_| |_|\__, |\___|
+ *                                                                                        __/ |
+ *                                                                                       |___/
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+var BaseToken = require('../data');
+
+// {0} tagged himself/herself in {1,choice,singular#{1,number} {2,map,photo#photo|video#video}|plural#{1,number} {2,map,photo#photos|video#videos}}.
+
+function MapToken(label, opts) {
+  this.label = label;
+  this.short_name = opts.index;
+  this.full_name = "{" + this.short_name + "}";
+  this.case_keys = [];
+  this.context_keys = [];
+
+  this.params = [];
+  var self = this;
+  opts.styles.forEach(function (style) {
+    self.params.push(style.key);
+  });
+}
+
+MapToken.prototype = new BaseToken();
+MapToken.prototype.constructor = BaseToken;
+
+module.exports = MapToken;
+},{"../data":39}],48:[function(require,module,exports){
+/**
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10915,10 +12732,12 @@ Translation.prototype = {
     return (this.context && utils.keys(this.context).length > 0);
   },
 
+  // {"count": 1}
   isValidTranslation: function(tokens) {
     if (!this.hasContextRules())
       return true;
 
+    // {"count": {"number": "one", "value": "vowel"}}
     var token_names = utils.keys(this.context);
     for(var i=0; i<token_names.length; i++) {
       var token_name = token_names[i];
@@ -10927,11 +12746,11 @@ Translation.prototype = {
 
       if (!object) return false;
 
-      var rule_keys = utils.keys(rules);
+      var contex_keys = utils.keys(rules);
 
-      for(var j=0; j<rule_keys.length; j++) {
-        var context_key = rule_keys[j];
-        var rule_key = rules[rule_keys[j]];
+      for(var j=0; j<contex_keys.length; j++) {
+        var context_key = contex_keys[j];
+        var rule_key = rules[contex_keys[j]];
 
         if (rule_key != "other") {
           var context = this.language.getContextByKeyword(context_key);
@@ -10953,9 +12772,9 @@ module.exports = Translation;
 
 
 
-},{"./tokens/data":38,"./utils":44}],42:[function(require,module,exports){
+},{"./tokens/data":39,"./utils":51}],49:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10992,6 +12811,7 @@ var Translation         = require("./translation");
 var HTMLDecorator       = require("./decorators/html");
 var DataTokenizer       = require("./tokenizers/data");
 var DecorationTokenizer = require("./tokenizers/decoration");
+var XMessageTokenizer = require("./tokenizers/xmessage");
 
 /**
  * Translation Key
@@ -11016,6 +12836,11 @@ var TranslationKey = function(attrs) {
 
 TranslationKey.prototype = {
 
+  /**
+   * Adds translations to the key
+   *
+   * @param translations_by_locale
+   */
   addTranslations: function(translations_by_locale) {
     var locales = utils.keys(translations_by_locale);
     for (var i=0; i<locales.length; i++) {
@@ -11031,6 +12856,11 @@ TranslationKey.prototype = {
     }
   },
 
+  /**
+   * Adds a translation
+   *
+   * @param translation
+   */
   addTranslation: function(translation) {
     var translations = this.translations[translation.locale];
     if (!translations) translations = [];
@@ -11038,6 +12868,12 @@ TranslationKey.prototype = {
     this.translations[translation.locale] = translations;
   },
 
+  /**
+   * Sets translations for a specific locale
+   *
+   * @param locale
+   * @param translations
+   */
   setTranslations: function(locale, translations) {
     this.translations[locale] = [];
 
@@ -11049,15 +12885,31 @@ TranslationKey.prototype = {
     }
   },
 
+  /**
+   * Clears translations
+   */
   resetTranslations: function() {
     this.translations = {};
   },
 
+  /**
+   * Returns translations for a specific language
+   *
+   * @param language
+   * @returns {*}
+   */
   getTranslationsForLanguage: function(language) {
     if (!this.translations) return [];
     return (this.translations[language.locale] || []);
   },
 
+  /**
+   * Finds the best translations for context
+   *
+   * @param language
+   * @param tokens
+   * @returns {*}
+   */
   findFirstValidTranslation: function(language, tokens) {
     var translations = this.getTranslationsForLanguage(language);
 
@@ -11069,6 +12921,14 @@ TranslationKey.prototype = {
     return null;
   },
 
+  /**
+   * Translates the key
+   *
+   * @param language
+   * @param tokens
+   * @param options
+   * @returns {*}
+   */
   translate: function(language, tokens, options) {
     options = options || {};
 
@@ -11101,6 +12961,11 @@ TranslationKey.prototype = {
     );
   },
 
+  /**
+   * Returns data tokens from the original label
+   *
+   * @returns {Array}
+   */
   getDataTokens: function() {
     if (!this.data_tokens) {
       var tokenizer = new DataTokenizer(this.label);
@@ -11109,6 +12974,11 @@ TranslationKey.prototype = {
     return this.data_tokens;
   },
 
+  /**
+   * Returns data token names from the original label
+   *
+   * @returns {Array}
+   */
   getDataTokenNames: function() {
     if (!this.data_token_names) {
       this.data_token_names = [];
@@ -11118,6 +12988,11 @@ TranslationKey.prototype = {
     return this.data_token_names;
   },
 
+  /**
+   * Returns decoration token names in the original label
+   *
+   * @returns {Array|*}
+   */
   getDecorationTokenNames: function() {
     if (!this.decoration_tokens) {
       var tokenizer = new DecorationTokenizer(this.label);
@@ -11127,8 +13002,24 @@ TranslationKey.prototype = {
     return this.decoration_tokens;
   },
 
+  /**
+   * Substitutes tokens in the label
+   *
+   * @param label
+   * @param tokens
+   * @param language
+   * @param options
+   * @returns {*}
+   */
   substituteTokens: function(label, tokens, language, options) {
     var tokenizer;
+
+    // Process XMessage
+    if (options.syntax == 'xmessage') {
+      // console.log(label);
+      tokenizer = new XMessageTokenizer(label);
+      return tokenizer.substitute(language, tokens, options);
+    }
 
     if (label.indexOf('[') != -1 || label.indexOf('<') != -1) {
       tokenizer = new DecorationTokenizer(label);
@@ -11148,9 +13039,9 @@ TranslationKey.prototype = {
 module.exports = TranslationKey;
 
 
-},{"./configuration":21,"./decorators/html":22,"./tokenizers/data":35,"./tokenizers/decoration":36,"./translation":41,"./utils":44}],43:[function(require,module,exports){
+},{"./configuration":21,"./decorators/html":22,"./tokenizers/data":35,"./tokenizers/decoration":36,"./tokenizers/xmessage":38,"./translation":48,"./utils":51}],50:[function(require,module,exports){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -11202,10 +13093,10 @@ Translator.prototype = {
 
 module.exports = Translator;
 
-},{"./utils":44}],44:[function(require,module,exports){
+},{"./utils":51}],51:[function(require,module,exports){
 (function (Buffer){
 /**
- * Copyright (c) 2016 Translation Exchange, Inc.
+ * Copyright (c) 2017 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -11307,10 +13198,31 @@ module.exports = {
     return temp;
   },
 
+  /**
+   * Returns object keys
+   *
+   * @param obj
+   * @returns {Array}
+   */
   keys: function (obj) {
     //  var keys = []; for (k in obj) {keys.push(k)}
     //  return keys;
     return Object.keys(obj);
+  },
+
+  /**
+   * Returns all object values
+   *
+   * @param obj
+   * @returns {Array}
+   */
+  values: function(obj) {
+    var vals = [];
+    for(var key in obj) {
+      vals.push(obj[key]);
+    }
+
+    return vals;
   },
 
   swapKeys: function (obj) {
@@ -11409,6 +13321,11 @@ module.exports = {
     return destination;
   },
 
+  /**
+   * Merge
+   * @param destination
+   * @returns {*}
+   */
   merge: function (destination) {
     for (var i = 1; i < arguments.length; i++) {
       destination = this.assign(destination, arguments[i], true);
@@ -11416,6 +13333,14 @@ module.exports = {
     return destination;
   },
 
+  /**
+   * Add CSS to a page
+   *
+   * @param doc
+   * @param value
+   * @param inline
+   * @returns {*}
+   */
   addCSS: function (doc, value, inline) {
     var css = null;
     if (inline) {
@@ -11434,6 +13359,15 @@ module.exports = {
     return css;
   },
 
+  /**
+   * Add JavaScript to a page
+   *
+   * @param doc
+   * @param id
+   * @param src
+   * @param onload
+   * @returns {*|Element}
+   */
   addJS: function (doc, id, src, onload) {
     var script = doc.createElement('script');
     script.setAttribute('id', id);
@@ -11445,10 +13379,22 @@ module.exports = {
     return script;
   },
 
+  /**
+   * Get internal cookie name
+   *
+   * @param key
+   * @returns {string}
+   */
   getCookieName: function (key) {
     return "trex_" + key;
   },
 
+  /**
+   * Gets a cookie value
+   *
+   * @param key
+   * @returns {*}
+   */
   getCookie: function (key) {
     var cname = this.getCookieName(key);
     var name = cname + "=";
@@ -11461,6 +13407,12 @@ module.exports = {
     return "";
   },
 
+  /**
+   * Sets a cookie
+   *
+   * @param key
+   * @param data
+   */
   setCookie: function (key, data) {
     var cname = this.getCookieName(key);
     document.cookie = cname + "=" + data + "; path=/";
@@ -11502,43 +13454,147 @@ module.exports = {
   },
   /* jshint ignore:end */
 
+  /**
+   * Get an element by id
+   *
+   * @param element_id
+   * @returns {*}
+   */
   element: function (element_id) {
     if (typeof element_id == 'string') return document.getElementById(element_id);
     return element_id;
   },
 
+  /**
+   * Checks if string is a number
+   *
+   * @param str
+   * @returns {boolean}
+   */
   isNumber: function (str) {
     return str.search(/^\s*\d+\s*$/) != -1;
   },
 
+  /**
+   * Checks if object is an Array
+   *
+   * @param obj
+   * @returns {boolean}
+   */
   isArray: function (obj) {
     if (obj === null || typeof obj == 'undefined') return false;
     return (obj.constructor.toString().indexOf("Array") !== -1);
   },
 
+  /**
+   * Creates an intersection between two arrays
+   *
+   * @param a
+   * @param b
+   */
+  intersect: function(a, b) {
+    var t;
+    if (b.length > a.length) {
+      t = b; b = a; a = t;
+    }
+    return a.filter(function (e) {
+      return b.indexOf(e) > -1;
+    });
+  },
+
+  /**
+   * Checks if array contains any items from another array
+   *
+   * @param arr1
+   * @param arr2
+   * @returns {boolean}
+   */
+  containsAny: function (arr1, arr2) {
+    var intersection = this.intersect(arr1, arr2);
+    return (intersection.length > 0);
+  },
+
+  /**
+   * Checks if array contains all items from another array
+   *
+   * @param arr1
+   * @param arr2
+   * @returns {boolean}
+   */
+  containsAll: function (arr1, arr2) {
+    var intersection = this.intersect(arr1, arr2);
+    return (intersection.length === arr1.length && intersection.length === arr2.length);
+  },
+
+  /**
+   * Check if object is undefined or null
+   *
+   * @param obj
+   * @returns {boolean}
+   */
+  isUndefinedOrNull: function(obj) {
+    return (typeof obj === 'undefined' || obj === null);
+  },
+
+  /**
+   * Checks if object is a date
+   *
+   * @param obj
+   * @returns {boolean}
+   */
   isDate: function (obj) {
     if (obj === null || typeof obj == 'undefined') return false;
     return (obj.constructor.toString().indexOf("Date") !== -1);
   },
 
+  /**
+   * Checks if object is a hash
+   *
+   * @param obj
+   * @returns {boolean}
+   */
   isObject: function (obj) {
     if (obj === null || typeof obj == 'undefined') return false;
     return (typeof obj == 'object');
   },
 
+  /**
+   * Checks if object is a function
+   *
+   * @param object
+   * @returns {boolean}
+   */
   isFunction: function (object) {
     return (typeof object === "function");
   },
 
+  /**
+   * Checks if object is a string
+   *
+   * @param obj
+   * @returns {boolean}
+   */
   isString: function (obj) {
     return (typeof obj === 'string');
   },
 
+  /**
+   * Checks if the string is a url
+   *
+   * @param str
+   * @returns {boolean}
+   */
   isURL: function (str) {
     str = "" + str;
     return (str.indexOf("http://") != -1) || (str.indexOf("https://") != -1);
   },
 
+  /**
+   * Exports object as parameters
+   *
+   * @param obj
+   * @returns {*}
+   */
   toQueryParams: function (obj) {
     if (typeof obj == 'undefined' || obj === null) return "";
     if (typeof obj == 'string') return obj;
@@ -11622,6 +13678,12 @@ module.exports = {
     return matches;
   },
 
+  /**
+   * Runs the functions in parallel
+   *
+   * @param funcs
+   * @param callback
+   */
   parallel: function (funcs, callback) {
     var k, i, l = 0, c = 0, r = {}, e = null;
     var cb = function (k) {
@@ -11641,9 +13703,17 @@ module.exports = {
     }
   },
 
+  /**
+   * Localizes a date object
+   *
+   * @param date
+   * @param opts
+   * @returns {*}
+   */
   localizeDate: function (date, opts) {
     opts = opts || {};
 
+    // todo: finish implementation
 
     return date;
   }
@@ -11651,4 +13721,4 @@ module.exports = {
 };
 
 }).call(this,require("buffer").Buffer)
-},{"./md5":30,"buffer":8}]},{},[6]);
+},{"./md5":30,"buffer":9}]},{},[6]);

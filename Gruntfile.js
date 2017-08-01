@@ -2,13 +2,12 @@ module.exports = function(grunt) {
 
   grunt.loadNpmTasks('grunt-contrib-jshint');
   grunt.loadNpmTasks('grunt-contrib-clean');
-  grunt.loadNpmTasks('grunt-contrib-copy');
   grunt.loadNpmTasks('grunt-contrib-watch');
   grunt.loadNpmTasks('grunt-contrib-uglify');
   grunt.loadNpmTasks('grunt-browserify');
-  grunt.loadNpmTasks('grunt-blanket');
   grunt.loadNpmTasks('grunt-coveralls');
   grunt.loadNpmTasks('grunt-mocha-test');
+  grunt.loadNpmTasks('grunt-mocha-istanbul');
   grunt.loadNpmTasks('grunt-jsdoc');
   grunt.loadNpmTasks('grunt-preprocess');
 
@@ -21,63 +20,18 @@ module.exports = function(grunt) {
       }
     },
 
-    copy: {
-      coverage: {
-        expand: true,
-        cwd: 'test/',
-        src: ['**'],
-        dest: 'coverage/test'
-      },
-      config: {
-        expand: true,
-        cwd: 'config/',
-        src: ['**'],
-        dest: 'coverage/config'
-      }
-    },
-
-    blanket: {
-      coverage: {
-        src: ['lib/'],
-        dest: 'coverage/lib/'
-      }      
-    },
-
     mochaTest: {
       'spec': {
         options: {
           reporter: 'spec',
           timeout: 10000
         },
-        src: ['coverage/test/**/*.js']
-      },
-      'html-cov': {
-        options: {
-          reporter: 'html-cov',
-          quiet: true,
-          captureFile: 'reports/coverage.html'
-        },
-        src: ['coverage/test/**/*.js']
-      },
-      'mocha-lcov-reporter': {
-        options: {
-          reporter: 'mocha-lcov-reporter',
-          quiet: true,
-          captureFile: 'reports/lcov.info'
-        },
-        src: ['coverage/test/**/*.js']
-      },
-      'travis-cov': {
-        options: {
-          reporter: 'travis-cov'
-        },
-        threshold: 0,
-        src: ['coverage/test/**/*.js']
+        src: ['test/**/**/*.js']
       }
     },
 
     jshint: {
-      files: ['Gruntfile.js', 'lib/**/*.js'],
+      files: ['Gruntfile.js', 'lib/**/**/*.js'],
       options: {
         //curly: true,
         //eqnull: true,
@@ -135,7 +89,7 @@ module.exports = function(grunt) {
     watch: {
       all: {
         files: ['lib/**/*.js', 'test/**/*.js'],
-        tasks: ['browserify','uglify'] //NOTE the :run flag
+        tasks: ['browserify','uglify']
       }
     },
 
@@ -144,7 +98,7 @@ module.exports = function(grunt) {
         force: true
       },
       all: {
-        src: 'reports/lcov.info'
+        src: 'coverage/lcov.info'
       }
     },
 
@@ -162,11 +116,9 @@ module.exports = function(grunt) {
     }
   });
 
-  //grunt.registerTask('test', ['jshint', 'blanket', 'copy', 'mochaTest', 'coveralls']);
-  grunt.registerTask('test', ['jshint', 'blanket', 'copy', 'mochaTest']);
+  grunt.registerTask('test', ['clean', 'jshint', 'mochaTest']);
+  grunt.registerTask('coverage', ['clean', 'jshint', 'mocha_istanbul:coverage', 'coveralls']);
   grunt.registerTask('docs', ['jsdoc']);
-  grunt.registerTask('build', ['jshint','browserify','preprocess','uglify']);
-
-  // Default task(s).
-  grunt.registerTask('default', ['test']);
+  grunt.registerTask('default', ['coverage']);
+  grunt.registerTask('build', ['clean', 'jshint','browserify','preprocess','uglify']);
 };
