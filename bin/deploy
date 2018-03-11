@@ -57,16 +57,12 @@ def version_or_environment(opts)
   opts[:environment] == 'production' ? version : opts[:environment]
 end
 
-def invalidate(files, opts)
+def invalidate(files, s3_access, s3_secret, cf_distribution, opts)
   unless ['production', 'staging', 'sandbox'].include?(opts[:environment])
     return
   end
 
   puts "Invalidating #{files.count} files..."
-
-  s3_access=ENV['AWS_ACCESS_KEY_ID']
-  s3_secret=ENV['AWS_SECRET_ACCESS_KEY']
-  cf_distribution=ENV['AWS_CLOUDFRONT_CDN_ID']
 
   paths = '<Path>/' + files.join('</Path><Path>/') + '</Path>'
 
@@ -116,10 +112,36 @@ if opts[:environment] == 'production'
 
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/#{version}/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/#{version}/tml.min.js")
-
   execute("aws s3 cp dist/tml.js s3://trex-snapshots/tools/tml/stable/tml.js")
   execute("aws s3 cp dist/tml.min.js s3://trex-snapshots/tools/tml/stable/tml.min.js")
-  invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], opts)
+  invalidate(["tools/tml/stable/tml.js", "tools/tml/stable/tml.min.js"], ENV['AWS_TREX_ACCESS_KEY_ID'], ENV['AWS_TREX_SECRET_ACCESS_KEY'], ENV['AWS_TREX_CLOUDFRONT_CDN_ID'], opts)
+  execute("open https://cdn.translationexchange.com/tools/tml/stable/tml.min.js")
+
+  execute("git checkout develop")
+
+  # increment version
+  puts("Incrementing build number to #{build_number + 1}...\n")
+  increment_build_number
+
+  # check in the new version
+  execute("git add package.json")
+  execute("git commit -m 'Incremented build version to #{version}'")
+  execute("git push")
+
+elsif opts[:environment] == 'globalize'
+  execute("git checkout master")
+  execute("git pull")
+  execute("git merge develop")
+  execute("git push")
+  execute("git tag '#{version}'")
+  execute("git push --tags")
+  execute("npm publish")
+
+  execute("aws --profile globalize s3 cp dist/tml.js s3://globalize-tools/sdk/js/#{version}/tml.js")
+  execute("aws --profile globalize s3 cp dist/tml.min.js s3://globalize-tools/sdk/js/#{version}/tml.min.js")
+  execute("aws --profile globalize s3 cp dist/tml.js s3://globalize-tools/sdk/js/stable/tml.js")
+  execute("aws --profile globalize s3 cp dist/tml.min.js s3://globalize-tools/sdk/js/stable/tml.min.js")
+  invalidate(["sdk/js/stable/tml.js", "sdk/js/stable/tml.min.js"], ENV['AWS_GLOBALIZE_ACCESS_KEY_ID'], ENV['AWS_GLOBALIZE_SECRET_ACCESS_KEY'], ENV['AWS_GLOBALIZE_CLOUDFRONT_TOOLS_ID'], opts)
   execute("open https://cdn.translationexchange.com/tools/tml/stable/tml.min.js")
 
   execute("git checkout develop")
