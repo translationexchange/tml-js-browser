@@ -6365,7 +6365,7 @@ ApiClient.prototype = {
 
   isCacheEnabled: function(options) {
     if (options.method == "post") return false;
-    return options.cache_key && this.cache && this.cache.adapter;
+    return options.cache_key && this.cache;
   },
 
   /**
@@ -8502,8 +8502,8 @@ Language.prototype = {
    */
   getSourcePath: function(options) {
 
-    if (!options.block_options || !options.block_options.length){
-      return [this.getSourceName(options.current_source || this.application.current_source)];
+    if (!options.block_options.length){
+      return [this.getSourceName(options.current_source)];
     }
 
     var source_path = [];
