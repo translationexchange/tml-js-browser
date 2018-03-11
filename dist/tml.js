@@ -1231,7 +1231,7 @@ module.exports = {
     var mutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
 
     tml = tml.utils.extend(tml, {
-      version: '0.4.50',
+      version: '1.0.1',
 
       on: emitter.on.bind(emitter),
       off: emitter.off.bind(emitter),
@@ -1512,6 +1512,31 @@ module.exports = {
         }.bind(this));
       },
 
+      /**
+       * Set the current source
+       *
+       * @param name
+       * @param callback
+       */
+      setSource: function(name, callback){
+        var app = tml.getApplication();
+        var update = function () {
+          app.current_source = name;
+          if(callback) callback();
+        };
+
+        if (!app.getSource(name)) {
+          app.loadSources([name], app.current_locale, function (sources) {
+            if (sources.length > 0 && sources[0] && sources[0].sources && sources[0].sources.length > 0) {
+              app.loadSources(sources[0].sources, app.current_locale, update);
+            } else {
+              update();
+            }
+          });
+        } else {
+          update();
+        }
+      },
 
       /**
        * Translates a string
@@ -6340,7 +6365,7 @@ ApiClient.prototype = {
 
   isCacheEnabled: function(options) {
     if (options.method == "post") return false;
-    return options.cache_key && this.cache;
+    return options.cache_key && this.cache && this.cache.adapter;
   },
 
   /**
@@ -8477,8 +8502,8 @@ Language.prototype = {
    */
   getSourcePath: function(options) {
 
-    if (!options.block_options.length){
-      return [this.getSourceName(options.current_source)];
+    if (!options.block_options || !options.block_options.length){
+      return [this.getSourceName(options.current_source || this.application.current_source)];
     }
 
     var source_path = [];
