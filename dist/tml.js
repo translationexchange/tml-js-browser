@@ -1,6 +1,6 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -138,7 +138,7 @@ Ajax.prototype = tml.utils.extend(new tml.ApiAdapterBase(), {
 module.exports = Ajax;
 },{"tml-js":34}],2:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -316,7 +316,7 @@ Browser.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
 module.exports = Browser;
 },{"tml-js":34}],3:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -451,7 +451,7 @@ Inline.prototype = tml.utils.extend(new tml.CacheAdapterBase(), {
 module.exports = Inline;
 },{"tml-js":34}],4:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -889,7 +889,7 @@ module.exports = {
 };
 },{"tml-js":34}],5:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -1162,7 +1162,7 @@ module.exports = {
 
 },{"tml-js":34}],6:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -1820,7 +1820,7 @@ module.exports = {
 
 },{"./api_adapters/ajax":1,"./cache_adapters/browser":2,"./cache_adapters/inline":3,"./helpers":4,"./tokenizers/dom":7,"tiny-emitter":12,"tml-js":34}],7:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -4367,7 +4367,7 @@ module.exports = E;
 
 },{}],13:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -4413,7 +4413,7 @@ module.exports = {
 };
 },{}],14:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -4694,7 +4694,7 @@ module.exports = {
 ;
 },{}],15:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6066,7 +6066,7 @@ module.exports = {
 };
 },{}],16:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6136,7 +6136,7 @@ Base.prototype = {
 module.exports = Base;
 },{}],17:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -6431,7 +6431,7 @@ module.exports = ApiClient;
 
 },{"./api_adapters/base":16,"./configuration":21,"./logger":29,"./utils":51}],18:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7133,7 +7133,7 @@ module.exports = Application;
 
 },{"./api_client":17,"./configuration":21,"./language":24,"./logger":29,"./source":33,"./utils":51}],19:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7334,7 +7334,7 @@ Cache.prototype = {
 module.exports = Cache;
 },{"./cache_adapters/base":20,"./configuration":21,"./utils":51}],20:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7607,7 +7607,7 @@ Base.prototype = {
 module.exports = Base;
 },{"../configuration":21,"../logger":29,"../utils":51}],21:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -7909,7 +7909,7 @@ module.exports = new Configuration();
 },{"./../config/application.js":13,"./../config/defaults.js":14,"./../config/english.js":15,"./cache":19,"./utils":51}],22:[function(require,module,exports){
 (function (Buffer){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8136,7 +8136,7 @@ module.exports = HTMLDecorator;
 }).call(this,require("buffer").Buffer)
 },{"../utils":51,"buffer":9}],23:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8300,7 +8300,7 @@ module.exports = {
 };
 },{}],24:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8526,7 +8526,7 @@ module.exports = Language;
 
 },{"./configuration":21,"./language_case":25,"./language_context":27,"./translation_key":49,"./utils":51}],25:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8643,7 +8643,7 @@ module.exports = LanguageCase;
 
 },{"./configuration":21,"./decorators/html":22,"./language_case_rule":26,"./utils":51}],26:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8742,7 +8742,7 @@ module.exports = LanguageCaseRule;
 
 },{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":51}],27:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8861,7 +8861,7 @@ LanguageContext.prototype = {
 module.exports = LanguageContext;
 },{"./configuration":21,"./language_context_rule":28,"./utils":51}],28:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8932,7 +8932,7 @@ LanguageContextRule.prototype = {
 module.exports = LanguageContextRule;
 },{"./rules_engine/evaluator":31,"./rules_engine/parser":32,"./utils":51}],29:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -8998,7 +8998,7 @@ var Logger = {
 module.exports = Logger;
 },{"./configuration":21,"./utils":51}],30:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9241,7 +9241,7 @@ var MD5 = function (string) {
 module.exports = MD5;
 },{}],31:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9470,7 +9470,7 @@ module.exports = Evaluator;
 
 },{}],32:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9545,7 +9545,7 @@ Parser.prototype = {
 module.exports = Parser;
 },{}],33:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9644,7 +9644,7 @@ module.exports = Source;
 },{"./configuration":21,"./translation":48,"./utils":51}],34:[function(require,module,exports){
 
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9751,7 +9751,7 @@ module.exports = Tml;
 
 },{"./api_adapters/base":16,"./application":18,"./cache_adapters/base":20,"./configuration":21,"./helpers/scripts":23,"./language":24,"./language_case":25,"./language_case_rule":26,"./language_context":27,"./language_context_rule":28,"./logger":29,"./source":33,"./tokenizers/dom":37,"./translation":48,"./translation_key":49,"./translator":50,"./utils":51}],35:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -9889,7 +9889,7 @@ DataTokenizer.prototype = {
 module.exports = DataTokenizer;
 },{"../tokens/data":39,"../tokens/map":41,"../tokens/method":42,"../tokens/piped":43}],36:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10126,7 +10126,7 @@ DecorationTokenizer.prototype = {
 module.exports = DecorationTokenizer;
 },{"../tokens/decoration":40,"../utils":51}],37:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -10748,7 +10748,7 @@ DomTokenizer.prototype = {
 module.exports = DomTokenizer;
 },{"../configuration":21,"../utils":51}],38:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  * Original author: Georg Puchta, LinkedIn.com
  *
@@ -11348,7 +11348,7 @@ XMessageTokenizer.prototype = {
 module.exports = XMessageTokenizer;
 },{"../configuration":21,"../tokens/xmessage/choice":44,"../tokens/xmessage/data":45,"../tokens/xmessage/decoration":46,"../tokens/xmessage/map":47,"../utils":51}],39:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -11827,7 +11827,7 @@ DataToken.prototype = {
 module.exports = DataToken;
 },{"../configuration":21,"../decorators/html":22,"../logger":29,"../utils":51}],40:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -11981,7 +11981,7 @@ DecorationToken.prototype = {
 module.exports = DecorationToken;
 },{"../configuration":21,"../logger":29,"../utils":51}],41:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -12091,7 +12091,7 @@ module.exports = MapToken;
 
 },{"../decorators/html":22,"../utils":51,"./data":39}],42:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -12201,7 +12201,7 @@ module.exports = MethodToken;
 
 },{"../decorators/html":22,"../utils":51,"./data":39}],43:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -12467,7 +12467,7 @@ module.exports = PipedToken;
 
 },{"../decorators/html":22,"../utils":51,"./data":39}],44:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -12534,7 +12534,7 @@ ChoiceToken.prototype.constructor = BaseToken;
 module.exports = ChoiceToken;
 },{"../../logger":29,"../../utils":51,"../data":39}],45:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -12582,7 +12582,7 @@ DataToken.prototype.constructor = BaseToken;
 module.exports = DataToken;
 },{"../data":39}],46:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -12665,7 +12665,7 @@ DecorationToken.prototype.getCloseTag = function() {
 module.exports = DecorationToken;
 },{"../../logger":29,"../../utils":51,"../decoration":40}],47:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -12719,7 +12719,7 @@ MapToken.prototype.constructor = BaseToken;
 module.exports = MapToken;
 },{"../data":39}],48:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -12813,7 +12813,7 @@ module.exports = Translation;
 
 },{"./tokens/data":39,"./utils":51}],49:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -13080,7 +13080,7 @@ module.exports = TranslationKey;
 
 },{"./configuration":21,"./decorators/html":22,"./tokenizers/data":35,"./tokenizers/decoration":36,"./tokenizers/xmessage":38,"./translation":48,"./utils":51}],50:[function(require,module,exports){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
@@ -13135,7 +13135,7 @@ module.exports = Translator;
 },{"./utils":51}],51:[function(require,module,exports){
 (function (Buffer){
 /**
- * Copyright (c) 2017 Translation Exchange, Inc.
+ * Copyright (c) 2018 Translation Exchange, Inc.
  *
  *  _______                  _       _   _             ______          _
  * |__   __|                | |     | | (_)           |  ____|        | |
