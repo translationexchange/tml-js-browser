@@ -142,7 +142,7 @@ elsif opts[:environment] == 'globalize'
   execute("aws --profile globalize s3 cp dist/tml.js s3://globalize-tools/sdk/js/stable/tml.js")
   execute("aws --profile globalize s3 cp dist/tml.min.js s3://globalize-tools/sdk/js/stable/tml.min.js")
   invalidate(["sdk/js/stable/tml.js", "sdk/js/stable/tml.min.js"], ENV['AWS_GLOBALIZE_ACCESS_KEY_ID'], ENV['AWS_GLOBALIZE_SECRET_ACCESS_KEY'], ENV['AWS_GLOBALIZE_CLOUDFRONT_TOOLS_ID'], opts)
-  execute("open https://cdn.translationexchange.com/tools/tml/stable/tml.min.js")
+  execute("open https://cdn.globalize.io/tools/tml/stable/tml.min.js")
 
   execute("git checkout develop")
 
