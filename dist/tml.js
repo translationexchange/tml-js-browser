@@ -617,7 +617,73 @@ var helpers = {
     helpers.addCss(css.join("\n"), 'tml-stylesheet');
   },
 
-  /**ch
+  /**
+   * Returns query params from a URL
+   *
+   * @param url
+   */
+  getQueryParams: function(url) {
+    var params = {};
+    var query = url.split('#')[0].split('?');
+    if (query.length === 1)
+      return params;
+
+    var vars = query[1].split('&');
+    for (var i = 0; i < vars.length; i++) {
+      var pair = vars[i].split('=');
+      params[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1]);
+    }
+
+    return params;
+  },
+
+  /**
+   * Exports object as parameters
+   *
+   * @param obj
+   * @returns {*}
+   */
+  toQueryParams: function (obj) {
+    if (typeof obj === 'undefined' || obj === null) return "";
+    if (typeof obj === 'string') return obj;
+
+    var qs = [];
+    for (var p in obj) {
+      qs.push(p + "=" + encodeURIComponent(obj[p]));
+    }
+    return qs.join("&");
+  },
+
+  /**
+   * Adjust iFrame urls with the locale
+   *
+   * @param app
+   */
+  adjustIFrameUrls: function(app) {
+    if (!app || !app.current_locale)
+      return;
+
+    var iframes = document.getElementsByTagName("iframe");
+    if (iframes.length === 0)
+      return;
+
+    tml.logger.debug("Adjusting IFrame URLs locale to " + app.current_locale);
+
+    for (var i = 0; i < iframes.length; i++) {
+      var url = iframes[i].src;
+      var params = helpers.getQueryParams(url);
+      params.locale = app.current_locale;
+
+      var new_url = url.split('?')[0] + "?" + helpers.toQueryParams(params);
+
+      var hash = url.split('#');
+      if (hash.length > 1) new_url = new_url + "#" + hash[1];
+
+      iframes[i].src = new_url;
+    }
+  },
+
+  /**
    * Returns path fragments
    *
    * @param path
@@ -885,7 +951,8 @@ module.exports = {
   setCookie: helpers.setCookie,
   includeLs: helpers.includeLs,
   includeCss: helpers.includeCss,
-  includeAgent: helpers.includeAgent
+  includeAgent: helpers.includeAgent,
+  adjustIFrameUrls: helpers.adjustIFrameUrls
 };
 },{"tml-js":34}],5:[function(require,module,exports){
 /**
@@ -1260,7 +1327,7 @@ module.exports = {
 
         // if current source is not set, we try to automatically extract it from the URL
         if (!options.current_source) {
-          options.current_source = function() {
+          options.current_source = function () {
             return helpers.getDefaultSource(options);
           };
         }
@@ -1322,7 +1389,7 @@ module.exports = {
           }
         }, options);
 
-        options.fetch_version = (options.cache.adapter == 'browser' && !cache_version);
+        options.fetch_version = (options.cache.adapter === 'browser' && !cache_version);
 
         tml.config.initCache(options.key);
         // console.log(options);
@@ -1371,6 +1438,9 @@ module.exports = {
             //  languages: tml.app.languages
             //});
 
+            if (options.skip_iframes !== true)
+              helpers.adjustIFrameUrls(tml.app);
+
             helpers.includeCss(tml.app);
 
             helpers.includeAgent(tml.app, {
@@ -1386,7 +1456,7 @@ module.exports = {
               css: tml.app.css,
               languages: tml.app.languages
             }, function () {
-              if (typeof(options.onLoad) == "function") {
+              if (typeof(options.onLoad) === "function") {
                 options.onLoad(tml.app);
               }
               tml.emit('load');
@@ -1518,11 +1588,11 @@ module.exports = {
        * @param name
        * @param callback
        */
-      setSource: function(name, callback){
+      setSource: function (name, callback) {
         var app = tml.getApplication();
         var update = function () {
           app.current_source = name;
-          if(callback) callback();
+          if (callback) callback();
         };
 
         if (!app.getSource(name)) {
@@ -6365,7 +6435,7 @@ ApiClient.prototype = {
 
   isCacheEnabled: function(options) {
     if (options.method == "post") return false;
-    return options.cache_key && this.cache;
+    return options.cache_key && this.cache && this.cache.adapter;
   },
 
   /**
@@ -8502,8 +8572,8 @@ Language.prototype = {
    */
   getSourcePath: function(options) {
 
-    if (!options.block_options.length){
-      return [this.getSourceName(options.current_source)];
+    if (!options.block_options || !options.block_options.length){
+      return [this.getSourceName(options.current_source || this.application.current_source)];
     }
 
     var source_path = [];
